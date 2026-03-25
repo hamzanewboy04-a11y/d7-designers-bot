@@ -43,32 +43,17 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
         )
         return
 
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
     await state.set_state(ReportStates.choose_date)
     await message.answer(
         "📝 <b>Сдать отчёт по задачам</b>\n\n"
-        "Выберите дату отчёта:",
+        "Обычно вы сдаёте отчёт <b>за вчера</b> — выберите нужную дату:\n\n"
+        f"📅 Вчера: <b>{yesterday}</b>",
         reply_markup=date_keyboard(),
     )
 
 
 # ── Date selection callbacks ───────────────────────────────────────────────
-
-
-@router.callback_query(ReportStates.choose_date, F.data == "report_date:today")
-async def cb_date_today(callback: CallbackQuery, state: FSMContext) -> None:
-    today = date.today().isoformat()
-    await state.update_data(report_date=today)
-    await state.set_state(ReportStates.tasks)
-    await callback.answer()
-    await callback.message.edit_text(  # type: ignore[union-attr]
-        f"📝 <b>Отчёт за сегодня ({today})</b>\n\n"
-        "Введите задачи в формате:\n"
-        "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
-        "Каждая задача — с новой строки. Пример:\n"
-        "<code>D7-101 12.50\n"
-        "D7-102 8.00</code>\n\n"
-        "<i>/cancel — отменить</i>"
-    )
 
 
 @router.callback_query(ReportStates.choose_date, F.data == "report_date:yesterday")
@@ -79,6 +64,23 @@ async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await callback.message.edit_text(  # type: ignore[union-attr]
         f"📝 <b>Отчёт за вчера ({yesterday})</b>\n\n"
+        "Введите задачи в формате:\n"
+        "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
+        "Каждая задача — с новой строки. Пример:\n"
+        "<code>D7-101 12.50\n"
+        "D7-102 8.00</code>\n\n"
+        "<i>/cancel — отменить</i>"
+    )
+
+
+@router.callback_query(ReportStates.choose_date, F.data == "report_date:today")
+async def cb_date_today(callback: CallbackQuery, state: FSMContext) -> None:
+    today = date.today().isoformat()
+    await state.update_data(report_date=today)
+    await state.set_state(ReportStates.tasks)
+    await callback.answer()
+    await callback.message.edit_text(  # type: ignore[union-attr]
+        f"📝 <b>Отчёт за сегодня ({today})</b>\n\n"
         "Введите задачи в формате:\n"
         "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
         "Каждая задача — с новой строки. Пример:\n"

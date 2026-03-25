@@ -381,6 +381,119 @@ class Database:
                 "payment_status": row[2] or "pending",
             }
 
+    # ── v6 methods ──────────────────────────────────────────────────────────
+
+    async def has_report_for_date(self, designer_id: int, report_date: date) -> bool:
+        """Return True if designer has at least one report entry for this date."""
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT 1 FROM reports WHERE designer_id = ? AND report_date = ? LIMIT 1",
+                (designer_id, report_date.isoformat()),
+            )
+            return await cursor.fetchone() is not None
+
+    async def list_missing_reports(self, report_date: date) -> list[Designer]:
+        """Return all designers who have NO report for the given date."""
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT telegram_id, username, d7_nick, role, wallet
+                FROM designers
+                WHERE telegram_id NOT IN (
+                    SELECT DISTINCT designer_id FROM reports WHERE report_date = ?
+                )
+                ORDER BY d7_nick
+                """,
+                (report_date.isoformat(),),
+            )
+            rows = await cursor.fetchall()
+            return [_row_to_designer(r) for r in rows]
+
+    async def get_employee_payment_history(self, designer_id: int) -> dict:
+        """
+        Return payment history for a designer.
+        Returns: paid_count, paid_sum, pending_count, unpaid_count, recent (list of tuples).
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT
+                    SUM(CASE WHEN payment_status = 'paid'    THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN payment_status = 'paid'    THEN cost_usdt ELSE 0 END),
+                    SUM(CASE WHEN payment_status = 'pending' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN payment_status = 'unpaid'  THEN 1 ELSE 0 END)
+                FROM reports WHERE designer_id = ?
+                """,
+                (designer_id,),
+            )
+            row = await cursor.fetchone()
+            paid_count = int(row[0] or 0) if row else 0
+            paid_sum = float(row[1] or 0) if row else 0.0
+            pending_count = int(row[2] or 0) if row else 0
+            unpaid_count = int(row[3] or 0) if row else 0
+
+            cursor2 = await db.execute(
+                """
+                SELECT report_date, task_code, cost_usdt, payment_status, paid_at
+                FROM reports
+                WHERE designer_id = ? AND payment_status IN ('paid', 'unpaid')
+                ORDER BY COALESCE(paid_at, created_at) DESC
+                LIMIT 10
+                """,
+                (designer_id,),
+            )
+            recent = await cursor2.fetchall()
+
+            return {
+                "paid_count": paid_count,
+                "paid_sum": paid_sum,
+                "pending_count": pending_count,
+                "unpaid_count": unpaid_count,
+                "recent": recent,
+            }
+
+    async def get_paid_summary(self, since_date: date) -> list[tuple]:
+        """
+        Return paid payment summaries since `since_date` (Moscow-adjusted via paid_at UTC+3).
+        Each row: (designer_id, d7_nick, report_date, task_count, total_usdt)
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT r.designer_id, d.d7_nick, r.report_date,
+                       COUNT(*) AS task_count, COALESCE(SUM(r.cost_usdt), 0.0) AS total_usdt
+                FROM reports r
+                JOIN designers d ON d.telegram_id = r.designer_id
+                WHERE r.payment_status = 'paid'
+                  AND DATE(r.paid_at, '+3 hours') >= ?
+                GROUP BY r.designer_id, r.report_date
+                ORDER BY r.report_date DESC, d.d7_nick
+                """,
+                (since_date.isoformat(),),
+            )
+            return await cursor.fetchall()
+
+    async def list_designers_by_role(self, role: str | None) -> list[Designer]:
+        """Return all designers, optionally filtered by role identifier."""
+        async with aiosqlite.connect(self.path) as db:
+            if role:
+                cursor = await db.execute(
+                    """
+                    SELECT telegram_id, username, d7_nick, role, wallet
+                    FROM designers WHERE role = ? ORDER BY d7_nick
+                    """,
+                    (role,),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT telegram_id, username, d7_nick, role, wallet
+                    FROM designers ORDER BY d7_nick
+                    """
+                )
+            rows = await cursor.fetchall()
+            return [_row_to_designer(r) for r in rows]
+
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
