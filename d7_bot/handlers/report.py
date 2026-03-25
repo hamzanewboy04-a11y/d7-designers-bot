@@ -321,12 +321,17 @@ async def step_tasks(
         nick_safe = html.escape(designer.d7_nick)
         wallet_safe = html.escape(designer.wallet)
         date_safe = html.escape(report_date)
+        task_lines = "\n".join(
+            f"• {html.escape(pt.task_code)} — {pt.cost_usdt:.2f} USDT"
+            for pt in accepted
+        )
         notify_text = (
             f"📬 <b>Новый отчёт от {nick_safe}</b>\n"
             f"📅 Дата: {date_safe}\n"
-            f"📋 Задач: {len(accepted)}\n"
-            f"💰 Сумма: <b>{total_accepted:.2f} USDT</b>\n"
             f"💳 Кошелёк: <code>{wallet_safe}</code>\n\n"
+            f"📋 <b>Задачи:</b>\n{task_lines}\n\n"
+            f"📦 Всего задач: {len(accepted)}\n"
+            f"💰 Сумма: <b>{total_accepted:.2f} USDT</b>\n\n"
             f"Отметьте статус оплаты:"
         )
         admin_ids = set(config.admin_ids) | set(await db.list_admins())

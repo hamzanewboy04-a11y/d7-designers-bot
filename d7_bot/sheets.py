@@ -92,46 +92,62 @@ class GoogleSheetsExporter:
         report_date: str,
         parsed_tasks: list["ParsedTask"],
     ) -> None:
-        """Append task rows to the 'reports' sheet (v7: includes task_prefix/group/geo)."""
+        """Append task rows to the 'reports' sheet (v7: includes task_prefix/group/geo).
+
+        Robustness guarantees:
+        - Creates the 'reports' sheet if it does not exist.
+        - Writes the canonical header exactly once (only when A1 is empty).
+        - Always maps row values to the current header order to avoid column drift.
+        """
         client = self._get_client()
         if not client:
             return
 
         now_iso = datetime.now(tz=timezone.utc).isoformat()
 
+        _CANONICAL_HEADER = [
+            "created_at", "report_date", "designer", "task_code",
+            "cost_usdt", "wallet", "payment_status", "paid_at", "paid_by",
+            "payment_comment", "task_prefix", "task_group", "task_geo",
+        ]
+
         def _append() -> None:
             sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
-            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=13)
+            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=len(_CANONICAL_HEADER))
 
-            # Check if header row exists (cell A1 is empty → write header)
+            # Determine current header; write canonical header if A1 is empty.
             header_cell = ws.acell("A1").value
             if not header_cell:
-                ws.append_row(
-                    [
-                        "created_at", "report_date", "designer", "task_code",
-                        "cost_usdt", "wallet", "payment_status", "paid_at", "paid_by",
-                        "payment_comment", "task_prefix", "task_group", "task_geo",
-                    ]
-                )
+                ws.update("A1", [_CANONICAL_HEADER])
+                header = _CANONICAL_HEADER[:]
+            else:
+                # Read the full first row to respect any existing column order.
+                header = ws.row_values(1)
+
+            # Build a lookup from column name → 0-based index in header.
+            col_idx: dict[str, int] = {name: i for i, name in enumerate(header)}
 
             for pt in parsed_tasks:
-                ws.append_row(
-                    [
-                        now_iso,
-                        report_date,
-                        designer.d7_nick,
-                        pt.task_code,
-                        pt.cost_usdt,
-                        designer.wallet,
-                        "pending",
-                        "",
-                        "",
-                        "",
-                        pt.task_prefix,
-                        pt.task_group,
-                        pt.task_geo,
-                    ]
-                )
+                data_map = {
+                    "created_at":      now_iso,
+                    "report_date":     report_date,
+                    "designer":        designer.d7_nick,
+                    "task_code":       pt.task_code,
+                    "cost_usdt":       pt.cost_usdt,
+                    "wallet":          designer.wallet,
+                    "payment_status":  "pending",
+                    "paid_at":         "",
+                    "paid_by":         "",
+                    "payment_comment": "",
+                    "task_prefix":     pt.task_prefix,
+                    "task_group":      pt.task_group,
+                    "task_geo":        pt.task_geo,
+                }
+                row = [""] * len(header)
+                for col_name, value in data_map.items():
+                    if col_name in col_idx:
+                        row[col_idx[col_name]] = value
+                ws.append_row(row, value_input_option="USER_ENTERED")
 
         try:
             await self._run(_append)
