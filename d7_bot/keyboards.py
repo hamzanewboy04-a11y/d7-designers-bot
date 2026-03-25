@@ -14,6 +14,13 @@ AVAILABLE_ROLES: list[tuple[str, str]] = [
     ("⭐ Отзовик", "reviewer"),
 ]
 
+# Human-readable role names (Russian)
+ROLE_LABELS: dict[str, str] = {
+    "designer": "Дизайнер",
+    "smm": "SMM",
+    "reviewer": "Отзовик",
+}
+
 # Text labels for main menu buttons (used to match incoming messages)
 BTN_REPORT = "📝 Сдать отчёт"
 BTN_PROFILE = "👤 Мой профиль"
@@ -23,11 +30,15 @@ BTN_EDIT = "✏️ Редактировать профиль"
 BTN_ADMIN_DESIGNERS = "👥 Сотрудники"
 BTN_ADMIN_REPORT = "📊 Отчёт за день"
 BTN_ADMIN_PENDING = "💸 Ожидают оплаты"
+BTN_ADMIN_PAID_TODAY = "✅ Выплачено сегодня"
+BTN_ADMIN_PAID_WEEK = "📈 Выплачено за неделю"
+BTN_ADMIN_MISSED = "⏰ Не сдали до 12:00"
 
 MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT}
 ADMIN_MENU_BUTTONS = {
     BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT,
     BTN_ADMIN_DESIGNERS, BTN_ADMIN_REPORT, BTN_ADMIN_PENDING,
+    BTN_ADMIN_PAID_TODAY, BTN_ADMIN_PAID_WEEK, BTN_ADMIN_MISSED,
 }
 
 
@@ -44,6 +55,11 @@ def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         ])
         keyboard.append([
             KeyboardButton(text=BTN_ADMIN_PENDING),
+            KeyboardButton(text=BTN_ADMIN_MISSED),
+        ])
+        keyboard.append([
+            KeyboardButton(text=BTN_ADMIN_PAID_TODAY),
+            KeyboardButton(text=BTN_ADMIN_PAID_WEEK),
         ])
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
@@ -53,12 +69,16 @@ def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
 
 
 def date_keyboard() -> InlineKeyboardMarkup:
-    """Inline keyboard for report date selection."""
+    """Inline keyboard for report date selection.
+    Default selection is 'yesterday' (✅ marked) since reports are typically for the previous day.
+    """
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📅 Сегодня", callback_data="report_date:today"),
-                InlineKeyboardButton(text="📅 Вчера", callback_data="report_date:yesterday"),
+                InlineKeyboardButton(text="✅ Вчера", callback_data="report_date:yesterday"),
+            ],
+            [
+                InlineKeyboardButton(text="Сегодня", callback_data="report_date:today"),
             ],
             [
                 InlineKeyboardButton(text="📆 Другая дата…", callback_data="report_date:custom"),
