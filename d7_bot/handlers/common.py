@@ -10,6 +10,10 @@ from aiogram.types import CallbackQuery, Message
 from d7_bot.config import Config
 from d7_bot.db import Database
 from d7_bot.keyboards import (
+    BTN_ADMIN_ANALYTICS_DAY,
+    BTN_ADMIN_ANALYTICS_MONTH,
+    BTN_ADMIN_ANALYTICS_WEEK,
+    BTN_ADMIN_DASHBOARD,
     BTN_ADMIN_DESIGNERS,
     BTN_ADMIN_MISSED,
     BTN_ADMIN_PAID_TODAY,
@@ -49,6 +53,11 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
             "\n• /paidtoday — выплачено сегодня"
             "\n• /paidweek — выплачено за 7 дней"
             "\n• /employeehistory &lt;id&gt; — история сотрудника"
+            "\n• /dashboard — сводный dashboard"
+            "\n• /analyticsday — аналитика за сегодня"
+            "\n• /analyticsweek — аналитика за 7 дней"
+            "\n• /analyticsmonth — аналитика за 30 дней"
+            "\n• /analyticsfrom YYYY-MM-DD YYYY-MM-DD — за произвольный период"
         ) if is_admin else ""
         text = (
             f"👋 Привет, <b>{first_name}</b>!\n\n"
@@ -278,6 +287,33 @@ async def btn_admin_paid_week(message: Message, db: Database, config: Config) ->
 async def btn_admin_missed(message: Message, db: Database, config: Config) -> None:
     from d7_bot.handlers.admin import cmd_missedreports
     await cmd_missedreports(message, db, config)
+
+
+# ── v7: admin analytics and dashboard button handlers ──────────────────────
+
+
+@router.message(F.text == BTN_ADMIN_DASHBOARD)
+async def btn_admin_dashboard(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_dashboard
+    await cmd_dashboard(message, db, config)
+
+
+@router.message(F.text == BTN_ADMIN_ANALYTICS_DAY)
+async def btn_admin_analytics_day(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_analyticsday
+    await cmd_analyticsday(message, db, config)
+
+
+@router.message(F.text == BTN_ADMIN_ANALYTICS_WEEK)
+async def btn_admin_analytics_week(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_analyticsweek
+    await cmd_analyticsweek(message, db, config)
+
+
+@router.message(F.text == BTN_ADMIN_ANALYTICS_MONTH)
+async def btn_admin_analytics_month(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_analyticsmonth
+    await cmd_analyticsmonth(message, db, config)
 
 
 # ── Fallback ───────────────────────────────────────────────────────────────

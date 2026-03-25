@@ -1,5 +1,73 @@
 # CHANGES.md — Список изменений
 
+## v7 — Строгие коды задач, аналитика, dashboard
+
+### 1. Строгая валидация кодов задач (report.py)
+
+- Допустимые префиксы: `OTHER`, `PERU1`, `PERU2`, `ITALY`, `ARG`, `CHILE`, `V`
+- Формат: `<PREFIX>-<числа>`, например `OTHER-1234`, `V-1001`
+- При неверном префиксе — дружелюбная ошибка:
+  `❌ PERUU-123 25 — неизвестный префикс. Допустимо: OTHER, PERU1, PERU2, ITALY, ARG, CHILE, V`
+- `ParsedTask` содержит `task_code`, `cost_usdt`, `task_prefix`, `task_group`, `task_geo`
+- Группы: `OTHER/PERU1/PERU2/ITALY/ARG/CHILE` → `task_group=geo, task_geo=<prefix>`; `V` → `task_group=visual, task_geo=""`
+
+### 2. DB/schema (db.py)
+
+- В таблицу `reports` добавлены поля: `task_prefix`, `task_group`, `task_geo`
+- Безопасная миграция через `ALTER TABLE ADD COLUMN` при отсутствии колонок
+- `add_task()` сохраняет все три новых поля
+- `TaskEntry` расширен: `task_prefix`, `task_group`, `task_geo`
+- Новые методы аналитики:
+  - `get_analytics_summary(start_date, end_date)` — total/geo/visual USDT + task_count
+  - `get_geo_breakdown(start_date, end_date)` — разбивка по GEO
+  - `get_group_breakdown(start_date, end_date)` — разбивка по группам
+- Новые helper-методы:
+  - `count_designers_by_role()` — количество сотрудников по ролям
+  - `get_pending_payments_summary()` — count + total_usdt pending
+
+### 3. Google Sheets (sheets.py)
+
+- Заголовок листа `reports` теперь включает: `task_prefix`, `task_group`, `task_geo`
+- `append_report_rows()` принимает `list[ParsedTask]` и записывает новые поля
+- Общее количество колонок увеличено до 13
+
+### 4. Аналитические команды (admin.py)
+
+- `/analyticsday` — аналитика за сегодня
+- `/analyticsweek` — аналитика за 7 дней
+- `/analyticsmonth` — аналитика за 30 дней
+- `/analyticsfrom YYYY-MM-DD YYYY-MM-DD` — за произвольный период
+- Каждая команда показывает: общая сумма, GEO creatives, Visuals, разбивка по GEO
+
+### 5. Dashboard (admin.py)
+
+- Команда `/dashboard` — сводный текстовый дашборд в одном сообщении
+- Выводит: сотрудников всего и по ролям, pending payments, paid today/week, пропустившие вчера, аналитику сегодня/неделю
+
+### 6. Новые кнопки в меню администратора (keyboards.py)
+
+- `📊 Dashboard` → `/dashboard`
+- `📉 Аналитика день` → `/analyticsday`
+- `📈 Аналитика 7 дней` → `/analyticsweek`
+- `🗓 Аналитика 30 дней` → `/analyticsmonth`
+- Константы: `BTN_ADMIN_DASHBOARD`, `BTN_ADMIN_ANALYTICS_DAY`, `BTN_ADMIN_ANALYTICS_WEEK`, `BTN_ADMIN_ANALYTICS_MONTH`
+
+### 7. Обработчики кнопок (common.py)
+
+- `btn_admin_dashboard` → `cmd_dashboard`
+- `btn_admin_analytics_day` → `cmd_analyticsday`
+- `btn_admin_analytics_week` → `cmd_analyticsweek`
+- `btn_admin_analytics_month` → `cmd_analyticsmonth`
+
+### 8. Синтаксическая проверка
+
+- Все основные файлы прошли `python3 -m py_compile`:
+  `db.py`, `bot.py`, `config.py`, `keyboards.py`, `scheduler.py`, `sheets.py`,
+  `handlers/__init__.py`, `handlers/admin.py`, `handlers/common.py`,
+  `handlers/register.py`, `handlers/report.py`, `main.py` — ✅ без ошибок.
+
+---
+
 ## v6 — Логика утреннего дедлайна, история выплат, фильтры ролей, новые кнопки
 
 ### 1. Логика дедлайна (08:00 / 12:00 МСК)

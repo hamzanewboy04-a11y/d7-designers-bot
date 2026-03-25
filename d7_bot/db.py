@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from typing import Any
 
 import aiosqlite
 
@@ -24,6 +25,9 @@ class TaskEntry:
     report_date: str
     task_code: str
     cost_usdt: float
+    task_prefix: str = ""
+    task_group: str = ""
+    task_geo: str = ""
 
 
 class Database:
@@ -105,6 +109,32 @@ class Database:
                 await db.commit()
                 logger.info("Reports payment_comment migration complete.")
 
+            # v7: add task_prefix, task_group, task_geo
+            cursor = await db.execute("PRAGMA table_info(reports)")
+            report_cols = {row[1] for row in await cursor.fetchall()}
+
+            if report_cols and "task_prefix" not in report_cols:
+                logger.info("Migrating reports table: adding task_prefix column")
+                await db.execute(
+                    "ALTER TABLE reports ADD COLUMN task_prefix TEXT NOT NULL DEFAULT ''"
+                )
+                await db.commit()
+
+            if report_cols and "task_group" not in report_cols:
+                logger.info("Migrating reports table: adding task_group column")
+                await db.execute(
+                    "ALTER TABLE reports ADD COLUMN task_group TEXT NOT NULL DEFAULT ''"
+                )
+                await db.commit()
+
+            if report_cols and "task_geo" not in report_cols:
+                logger.info("Migrating reports table: adding task_geo column")
+                await db.execute(
+                    "ALTER TABLE reports ADD COLUMN task_geo TEXT NOT NULL DEFAULT ''"
+                )
+                await db.commit()
+                logger.info("Reports v7 task fields migration complete.")
+
     async def init(self) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.executescript("""
@@ -135,6 +165,9 @@ class Database:
                     paid_at TEXT,
                     paid_by INTEGER,
                     payment_comment TEXT DEFAULT '',
+                    task_prefix TEXT NOT NULL DEFAULT '',
+                    task_group TEXT NOT NULL DEFAULT '',
+                    task_geo TEXT NOT NULL DEFAULT '',
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (designer_id) REFERENCES designers(telegram_id) ON DELETE CASCADE,
                     UNIQUE(designer_id, report_date, task_code)
@@ -248,10 +281,20 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
                 """
-                INSERT INTO reports (designer_id, report_date, task_code, cost_usdt, payment_status)
-                VALUES (?, ?, ?, ?, 'pending')
+                INSERT INTO reports
+                    (designer_id, report_date, task_code, cost_usdt, payment_status,
+                     task_prefix, task_group, task_geo)
+                VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
                 """,
-                (task.designer_id, task.report_date, task.task_code, task.cost_usdt),
+                (
+                    task.designer_id,
+                    task.report_date,
+                    task.task_code,
+                    task.cost_usdt,
+                    task.task_prefix,
+                    task.task_group,
+                    task.task_geo,
+                ),
             )
             await db.commit()
         return True
@@ -493,6 +536,122 @@ class Database:
                 )
             rows = await cursor.fetchall()
             return [_row_to_designer(r) for r in rows]
+
+    # ── v7 Analytics ────────────────────────────────────────────────────────
+
+    async def get_analytics_summary(self, start_date: str, end_date: str) -> dict:
+        """
+        Return analytics summary for a date range [start_date, end_date] (inclusive).
+        Returns:
+          {
+            "total_usdt": float,
+            "geo_usdt": float,    # sum for task_group='geo'
+            "visual_usdt": float, # sum for task_group='visual'
+            "task_count": int,
+          }
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT
+                    COALESCE(SUM(cost_usdt), 0.0) AS total_usdt,
+                    COALESCE(SUM(CASE WHEN task_group = 'geo'    THEN cost_usdt ELSE 0 END), 0.0) AS geo_usdt,
+                    COALESCE(SUM(CASE WHEN task_group = 'visual' THEN cost_usdt ELSE 0 END), 0.0) AS visual_usdt,
+                    COUNT(*) AS task_count
+                FROM reports
+                WHERE report_date >= ? AND report_date <= ?
+                """,
+                (start_date, end_date),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return {"total_usdt": 0.0, "geo_usdt": 0.0, "visual_usdt": 0.0, "task_count": 0}
+            return {
+                "total_usdt": float(row[0]),
+                "geo_usdt": float(row[1]),
+                "visual_usdt": float(row[2]),
+                "task_count": int(row[3]),
+            }
+
+    async def get_geo_breakdown(self, start_date: str, end_date: str) -> list[dict]:
+        """
+        Return per-geo breakdown for geo group tasks.
+        Returns list of {"geo": str, "usdt": float, "count": int}
+        sorted by usdt desc.
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT task_geo,
+                       COALESCE(SUM(cost_usdt), 0.0) AS usdt,
+                       COUNT(*) AS cnt
+                FROM reports
+                WHERE report_date >= ? AND report_date <= ?
+                  AND task_group = 'geo'
+                GROUP BY task_geo
+                ORDER BY usdt DESC
+                """,
+                (start_date, end_date),
+            )
+            rows = await cursor.fetchall()
+            return [{"geo": r[0], "usdt": float(r[1]), "count": int(r[2])} for r in rows]
+
+    async def get_group_breakdown(self, start_date: str, end_date: str) -> list[dict]:
+        """
+        Return per-group breakdown.
+        Returns list of {"group": str, "usdt": float, "count": int}
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT task_group,
+                       COALESCE(SUM(cost_usdt), 0.0) AS usdt,
+                       COUNT(*) AS cnt
+                FROM reports
+                WHERE report_date >= ? AND report_date <= ?
+                GROUP BY task_group
+                ORDER BY usdt DESC
+                """,
+                (start_date, end_date),
+            )
+            rows = await cursor.fetchall()
+            return [{"group": r[0], "usdt": float(r[1]), "count": int(r[2])} for r in rows]
+
+    # ── v7 Dashboard helpers ─────────────────────────────────────────────────
+
+    async def count_designers_by_role(self) -> dict[str, int]:
+        """Return count of designers per role + total."""
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT role, COUNT(*) FROM designers GROUP BY role
+                """
+            )
+            rows = await cursor.fetchall()
+            result: dict[str, int] = {}
+            total = 0
+            for role, cnt in rows:
+                result[role or ""] = cnt
+                total += cnt
+            result["__total__"] = total
+            return result
+
+    async def get_pending_payments_summary(self) -> dict:
+        """Return count and total USDT of all pending payment groups."""
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT COUNT(DISTINCT designer_id || '|' || report_date),
+                       COALESCE(SUM(cost_usdt), 0.0)
+                FROM reports
+                WHERE payment_status = 'pending'
+                """
+            )
+            row = await cursor.fetchone()
+            return {
+                "count": int(row[0]) if row else 0,
+                "total_usdt": float(row[1]) if row else 0.0,
+            }
 
 
 # ── helpers ────────────────────────────────────────────────────────────────

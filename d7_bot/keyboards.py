@@ -34,11 +34,19 @@ BTN_ADMIN_PAID_TODAY = "✅ Выплачено сегодня"
 BTN_ADMIN_PAID_WEEK = "📈 Выплачено за неделю"
 BTN_ADMIN_MISSED = "⏰ Не сдали до 12:00"
 
+# v7: dashboard and analytics buttons
+BTN_ADMIN_DASHBOARD = "📊 Dashboard"
+BTN_ADMIN_ANALYTICS_DAY = "📉 Аналитика день"
+BTN_ADMIN_ANALYTICS_WEEK = "📈 Аналитика 7 дней"
+BTN_ADMIN_ANALYTICS_MONTH = "🗓 Аналитика 30 дней"
+
 MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT}
 ADMIN_MENU_BUTTONS = {
     BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT,
     BTN_ADMIN_DESIGNERS, BTN_ADMIN_REPORT, BTN_ADMIN_PENDING,
     BTN_ADMIN_PAID_TODAY, BTN_ADMIN_PAID_WEEK, BTN_ADMIN_MISSED,
+    BTN_ADMIN_DASHBOARD, BTN_ADMIN_ANALYTICS_DAY,
+    BTN_ADMIN_ANALYTICS_WEEK, BTN_ADMIN_ANALYTICS_MONTH,
 }
 
 
@@ -60,6 +68,14 @@ def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         keyboard.append([
             KeyboardButton(text=BTN_ADMIN_PAID_TODAY),
             KeyboardButton(text=BTN_ADMIN_PAID_WEEK),
+        ])
+        keyboard.append([
+            KeyboardButton(text=BTN_ADMIN_DASHBOARD),
+        ])
+        keyboard.append([
+            KeyboardButton(text=BTN_ADMIN_ANALYTICS_DAY),
+            KeyboardButton(text=BTN_ADMIN_ANALYTICS_WEEK),
+            KeyboardButton(text=BTN_ADMIN_ANALYTICS_MONTH),
         ])
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
