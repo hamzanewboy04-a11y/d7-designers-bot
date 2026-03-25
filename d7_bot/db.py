@@ -33,10 +33,10 @@ class Database:
 
     async def migrate(self) -> None:
         """
-        Safe migration: if the old schema (with experience/portfolio columns)
-        exists, recreate the table without them.
+        Safe migration: handles schema changes for designers and reports tables.
         """
         async with aiosqlite.connect(self.path) as db:
+            # --- designers migration: remove experience/portfolio columns ---
             cursor = await db.execute("PRAGMA table_info(designers)")
             columns = {row[1] for row in await cursor.fetchall()}
 
@@ -70,7 +70,21 @@ class Database:
                     ALTER TABLE designers_new RENAME TO designers;
                 """)
                 await db.commit()
-                logger.info("Migration complete.")
+                logger.info("Designers migration complete.")
+
+            # --- reports migration: add payment columns if absent ---
+            cursor = await db.execute("PRAGMA table_info(reports)")
+            report_cols = {row[1] for row in await cursor.fetchall()}
+
+            if report_cols and "payment_status" not in report_cols:
+                logger.info("Migrating reports table: adding payment columns")
+                await db.execute(
+                    "ALTER TABLE reports ADD COLUMN payment_status TEXT DEFAULT 'pending'"
+                )
+                await db.execute("ALTER TABLE reports ADD COLUMN paid_at TEXT")
+                await db.execute("ALTER TABLE reports ADD COLUMN paid_by INTEGER")
+                await db.commit()
+                logger.info("Reports payment migration complete.")
 
     async def init(self) -> None:
         async with aiosqlite.connect(self.path) as db:
@@ -97,6 +111,9 @@ class Database:
                     report_date TEXT NOT NULL,
                     task_code TEXT NOT NULL,
                     cost_usdt REAL NOT NULL,
+                    payment_status TEXT DEFAULT 'pending',
+                    paid_at TEXT,
+                    paid_by INTEGER,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (designer_id) REFERENCES designers(telegram_id) ON DELETE CASCADE,
                     UNIQUE(designer_id, report_date, task_code)
@@ -210,8 +227,8 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
                 """
-                INSERT INTO reports (designer_id, report_date, task_code, cost_usdt)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO reports (designer_id, report_date, task_code, cost_usdt, payment_status)
+                VALUES (?, ?, ?, ?, 'pending')
                 """,
                 (task.designer_id, task.report_date, task.task_code, task.cost_usdt),
             )
@@ -219,10 +236,14 @@ class Database:
         return True
 
     async def list_tasks_by_date(self, report_date: date) -> list[tuple]:
+        """
+        Return all tasks for a date.
+        Each row: (d7_nick, wallet, task_code, cost_usdt, payment_status)
+        """
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
-                SELECT d.d7_nick, d.wallet, r.task_code, r.cost_usdt
+                SELECT d.d7_nick, d.wallet, r.task_code, r.cost_usdt, r.payment_status
                 FROM reports r
                 JOIN designers d ON d.telegram_id = r.designer_id
                 WHERE r.report_date = ?
@@ -271,6 +292,72 @@ class Database:
             if not row:
                 return {"task_count": 0, "total_usdt": 0.0}
             return {"task_count": int(row[0]), "total_usdt": float(row[1])}
+
+    # ── Payment ────────────────────────────────────────────────────────────
+
+    async def update_payment_status(
+        self,
+        designer_id: int,
+        report_date: str,
+        status: str,
+        paid_by: int,
+    ) -> None:
+        """Update payment_status for all tasks of a designer for a given date."""
+        paid_at = datetime.utcnow().isoformat() if status == "paid" else None
+        paid_by_val = paid_by if status == "paid" else None
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                UPDATE reports
+                SET payment_status = ?, paid_at = ?, paid_by = ?
+                WHERE designer_id = ? AND report_date = ?
+                """,
+                (status, paid_at, paid_by_val, designer_id, report_date),
+            )
+            await db.commit()
+
+    async def get_pending_payments(self) -> list[tuple]:
+        """
+        Return pending payment summaries grouped by designer+date.
+        Each row: (designer_id, d7_nick, wallet, report_date, task_count, total_usdt)
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT r.designer_id, d.d7_nick, d.wallet, r.report_date,
+                       COUNT(*) AS task_count, COALESCE(SUM(r.cost_usdt), 0.0) AS total_usdt
+                FROM reports r
+                JOIN designers d ON d.telegram_id = r.designer_id
+                WHERE r.payment_status = 'pending'
+                GROUP BY r.designer_id, r.report_date
+                ORDER BY r.report_date DESC, d.d7_nick
+                """
+            )
+            return await cursor.fetchall()
+
+    async def get_report_summary(self, designer_id: int, report_date: str) -> dict:
+        """
+        Return summary for a designer+date:
+        {"task_count": int, "total_usdt": float, "payment_status": str}
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT COUNT(*), COALESCE(SUM(cost_usdt), 0.0),
+                       COALESCE(MAX(payment_status), 'pending')
+                FROM reports
+                WHERE designer_id = ? AND report_date = ?
+                """,
+                (designer_id, report_date),
+            )
+            row = await cursor.fetchone()
+            if not row or row[0] == 0:
+                return {"task_count": 0, "total_usdt": 0.0, "payment_status": "pending"}
+            return {
+                "task_count": int(row[0]),
+                "total_usdt": float(row[1]),
+                "payment_status": row[2] or "pending",
+            }
 
 
 # ── helpers ────────────────────────────────────────────────────────────────

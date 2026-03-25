@@ -11,6 +11,7 @@ from d7_bot.config import Config
 from d7_bot.db import Database
 from d7_bot.keyboards import (
     BTN_ADMIN_DESIGNERS,
+    BTN_ADMIN_PENDING,
     BTN_ADMIN_REPORT,
     BTN_EDIT,
     BTN_PROFILE,
@@ -38,7 +39,10 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
     is_admin = await db.is_admin(user.id, config.admin_ids)
 
     if designer:
-        admin_hint = "\n• /listdesigners — все дизайнеры\n• /adminreport — отчёт за день" if is_admin else ""
+        admin_hint = (
+            "\n• /listdesigners — все дизайнеры\n• /adminreport — отчёт за день"
+            "\n• /pendingpayments — ожидающие оплаты"
+        ) if is_admin else ""
         text = (
             f"👋 Привет, <b>{first_name}</b>!\n\n"
             f"Я помогаю команде D7 вести учёт задач.\n\n"
@@ -243,6 +247,12 @@ async def btn_admin_designers(message: Message, db: Database, config: Config) ->
 async def btn_admin_report(message: Message, db: Database, config: Config) -> None:
     from d7_bot.handlers.admin import cmd_adminreport
     await cmd_adminreport(message, db, config)
+
+
+@router.message(F.text == BTN_ADMIN_PENDING)
+async def btn_admin_pending(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_pendingpayments
+    await cmd_pendingpayments(message, db, config)
 
 
 # ── Fallback ───────────────────────────────────────────────────────────────

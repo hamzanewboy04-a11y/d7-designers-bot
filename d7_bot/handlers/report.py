@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import html
 import logging
 from datetime import date, timedelta
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
+from d7_bot.config import Config
 from d7_bot.db import Database, TaskEntry
-from d7_bot.keyboards import date_keyboard, main_menu_keyboard
+from d7_bot.keyboards import date_keyboard, main_menu_keyboard, payment_keyboard
 from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
@@ -135,6 +137,8 @@ async def step_tasks(
     state: FSMContext,
     db: Database,
     sheets: GoogleSheetsExporter,
+    bot: Bot,
+    config: Config,
 ) -> None:
     user = message.from_user
     if not user:
@@ -168,7 +172,7 @@ async def step_tasks(
     for line in lines:
         parts = line.split(maxsplit=1)
         if len(parts) != 2:
-            errors.append(f"• <code>{line}</code> — неверный формат")
+            errors.append(f"• <code>{html.escape(line)}</code> — неверный формат")
             continue
         task_code, cost_str = parts
         try:
@@ -176,7 +180,7 @@ async def step_tasks(
             if cost_usdt <= 0:
                 raise ValueError("non-positive")
         except ValueError:
-            errors.append(f"• <code>{line}</code> — некорректная стоимость")
+            errors.append(f"• <code>{html.escape(line)}</code> — некорректная стоимость")
             continue
 
         task = TaskEntry(
@@ -189,7 +193,9 @@ async def step_tasks(
         if added:
             accepted.append(line)
         else:
-            duplicates.append(f"• <code>{task_code}</code> — уже сдана за {report_date}")
+            duplicates.append(
+                f"• <code>{html.escape(task_code)}</code> — уже сдана за {html.escape(report_date)}"
+            )
 
     # Build response
     parts_resp: list[str] = []
@@ -233,6 +239,34 @@ async def step_tasks(
             logger.info("Sheets: appended %d rows for %s", len(accepted), designer.d7_nick)
         except Exception as exc:
             logger.error("Sheets export failed: %s", exc)
+
+    # Notify admins about the new report with payment buttons
+    if accepted:
+        total_accepted = sum(
+            float(ln.split(maxsplit=1)[1].replace(",", "."))
+            for ln in accepted
+        )
+        nick_safe = html.escape(designer.d7_nick)
+        wallet_safe = html.escape(designer.wallet)
+        date_safe = html.escape(report_date)
+        notify_text = (
+            f"📬 <b>Новый отчёт от {nick_safe}</b>\n"
+            f"📅 Дата: {date_safe}\n"
+            f"📋 Задач: {len(accepted)}\n"
+            f"💰 Сумма: <b>{total_accepted:.2f} USDT</b>\n"
+            f"💳 Кошелёк: <code>{wallet_safe}</code>\n\n"
+            f"Отметьте статус оплаты:"
+        )
+        admin_ids = set(config.admin_ids) | set(await db.list_admins())
+        for admin_id in admin_ids:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    notify_text,
+                    reply_markup=payment_keyboard(user.id, report_date),
+                )
+            except Exception as exc:
+                logger.warning("Could not notify admin %s: %s", admin_id, exc)
 
     logger.info(
         "Report from %s (%s) for %s: %d accepted, %d duplicates, %d errors",
