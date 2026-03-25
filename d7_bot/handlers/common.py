@@ -7,13 +7,15 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from d7_bot.config import Config
 from d7_bot.db import Database
 from d7_bot.keyboards import (
+    BTN_ADMIN_DESIGNERS,
+    BTN_ADMIN_REPORT,
     BTN_EDIT,
     BTN_PROFILE,
     BTN_REPORT,
     BTN_TASKS,
-    MAIN_MENU_BUTTONS,
     main_menu_keyboard,
     period_keyboard,
 )
@@ -26,25 +28,27 @@ router = Router(name="common")
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, db: Database) -> None:
+async def cmd_start(message: Message, db: Database, config: Config) -> None:
     user = message.from_user
     if not user:
         return
 
     first_name = user.first_name or "дизайнер"
     designer = await db.get_designer(user.id)
+    is_admin = await db.is_admin(user.id, config.admin_ids)
 
     if designer:
+        admin_hint = "\n• /listdesigners — все дизайнеры\n• /adminreport — отчёт за день" if is_admin else ""
         text = (
             f"👋 Привет, <b>{first_name}</b>!\n\n"
             f"Я помогаю команде D7 вести учёт задач.\n\n"
             f"Добро пожаловать обратно, <b>{designer.d7_nick}</b>! 👇\n\n"
-            f"Выберите действие из меню ниже или используйте команды:\n"
+            f"Команды:\n"
             f"• /report — сдать отчёт\n"
             f"• /me — мой профиль\n"
             f"• /myreports — мои задачи\n"
-            f"• /register — обновить профиль\n"
-            f"• /cancel — отменить текущее действие"
+            f"• /register — обновить профиль"
+            f"{admin_hint}"
         )
     else:
         text = (
@@ -54,25 +58,27 @@ async def cmd_start(message: Message, db: Database) -> None:
             f"Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register"
         )
 
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=main_menu_keyboard(is_admin=is_admin))
 
 
 # ── /cancel ────────────────────────────────────────────────────────────────
 
 
 @router.message(Command("cancel"))
-async def cmd_cancel(message: Message, state: FSMContext) -> None:
+async def cmd_cancel(message: Message, state: FSMContext, db: Database, config: Config) -> None:
+    user = message.from_user
+    is_admin = await db.is_admin(user.id, config.admin_ids) if user else False
     current = await state.get_state()
     if current is None:
         await message.answer(
             "ℹ️ Нечего отменять — вы не находитесь в процессе ввода данных.",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return
     await state.clear()
     await message.answer(
         "❌ Действие отменено.\n\nВыберите что-нибудь из меню 👇",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(is_admin=is_admin),
     )
 
 
@@ -80,35 +86,28 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Command("me"))
-async def cmd_me(message: Message, db: Database) -> None:
+async def cmd_me(message: Message, db: Database, config: Config) -> None:
     user = message.from_user
     if not user:
         return
 
+    is_admin = await db.is_admin(user.id, config.admin_ids)
     designer = await db.get_designer(user.id)
     if not designer:
         await message.answer(
             "❌ Вы ещё не зарегистрированы.\n\n"
             "Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return
 
     formats_str = ", ".join(designer.formats) if designer.formats else "—"
-
-    # Mask wallet: show first 4 and last 4 characters
     wallet = designer.wallet
-    if len(wallet) > 10:
-        wallet_display = f"{wallet[:4]}…{wallet[-4:]}"
-    else:
-        wallet_display = wallet
+    wallet_display = f"{wallet[:4]}…{wallet[-4:]}" if len(wallet) > 10 else wallet
 
-    # Get stats for 7 days
     stats = await db.get_designer_stats(user.id, days=7)
-    task_count = stats["task_count"]
-    total_usdt = stats["total_usdt"]
-
     tg_link = f"@{designer.username}" if designer.username else f"id{designer.telegram_id}"
+    admin_badge = "\n\n🔐 <b>Вы администратор</b>" if is_admin else ""
 
     await message.answer(
         f"👤 <b>Профиль дизайнера</b>\n\n"
@@ -116,9 +115,10 @@ async def cmd_me(message: Message, db: Database) -> None:
         f"🔗 Telegram: {tg_link}\n"
         f"🎨 Форматы: {formats_str}\n"
         f"💳 Кошелёк: <code>{wallet_display}</code>\n\n"
-        f"📊 Задач за 7 дней: <b>{task_count}</b>\n"
-        f"💰 Сумма за 7 дней: <b>{total_usdt:.2f} USDT</b>",
-        reply_markup=main_menu_keyboard(),
+        f"📊 Задач за 7 дней: <b>{stats['task_count']}</b>\n"
+        f"💰 Сумма за 7 дней: <b>{stats['total_usdt']:.2f} USDT</b>"
+        f"{admin_badge}",
+        reply_markup=main_menu_keyboard(is_admin=is_admin),
     )
 
 
@@ -126,17 +126,18 @@ async def cmd_me(message: Message, db: Database) -> None:
 
 
 @router.message(Command("myreports"))
-async def cmd_myreports(message: Message, db: Database) -> None:
+async def cmd_myreports(message: Message, db: Database, config: Config) -> None:
     user = message.from_user
     if not user:
         return
 
+    is_admin = await db.is_admin(user.id, config.admin_ids)
     designer = await db.get_designer(user.id)
     if not designer:
         await message.answer(
             "❌ Вы ещё не зарегистрированы.\n\n"
             "Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return
 
@@ -147,7 +148,7 @@ async def cmd_myreports(message: Message, db: Database) -> None:
 
 
 @router.callback_query(F.data.startswith("period:"))
-async def cb_period(callback: CallbackQuery, db: Database) -> None:
+async def cb_period(callback: CallbackQuery, db: Database, config: Config) -> None:
     user = callback.from_user
     if not user:
         await callback.answer()
@@ -159,13 +160,13 @@ async def cb_period(callback: CallbackQuery, db: Database) -> None:
     except ValueError:
         days = 7
 
+    is_admin = await db.is_admin(user.id, config.admin_ids)
     designer = await db.get_designer(user.id)
     if not designer:
         await callback.answer("Профиль не найден.", show_alert=True)
         return
 
     rows = await db.list_tasks_by_designer(user.id, days=days)
-
     await callback.answer()
 
     if not rows:
@@ -175,7 +176,7 @@ async def cb_period(callback: CallbackQuery, db: Database) -> None:
         )
         await callback.message.answer(  # type: ignore[union-attr]
             "Выберите действие 👇",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return
 
@@ -200,12 +201,10 @@ async def cb_period(callback: CallbackQuery, db: Database) -> None:
 
     lines.append(f"\n💰 <b>Всего за период: {grand_total:.2f} USDT</b>")
 
-    await callback.message.edit_text(  # type: ignore[union-attr]
-        "\n".join(lines),
-    )
+    await callback.message.edit_text("\n".join(lines))  # type: ignore[union-attr]
     await callback.message.answer(  # type: ignore[union-attr]
         "Выберите действие 👇",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(is_admin=is_admin),
     )
 
 
@@ -214,49 +213,52 @@ async def cb_period(callback: CallbackQuery, db: Database) -> None:
 
 @router.message(F.text == BTN_REPORT)
 async def btn_report(message: Message, state: FSMContext, db: Database) -> None:
-    """Trigger /report flow from main menu button."""
     from d7_bot.handlers.report import cmd_report
     await cmd_report(message, state, db)
 
 
 @router.message(F.text == BTN_PROFILE)
-async def btn_profile(message: Message, db: Database) -> None:
-    """Trigger /me from main menu button."""
-    await cmd_me(message, db)
+async def btn_profile(message: Message, db: Database, config: Config) -> None:
+    await cmd_me(message, db, config)
 
 
 @router.message(F.text == BTN_TASKS)
-async def btn_tasks(message: Message, db: Database) -> None:
-    """Trigger /myreports from main menu button."""
-    await cmd_myreports(message, db)
+async def btn_tasks(message: Message, db: Database, config: Config) -> None:
+    await cmd_myreports(message, db, config)
 
 
 @router.message(F.text == BTN_EDIT)
 async def btn_edit(message: Message, state: FSMContext) -> None:
-    """Trigger /register from main menu button."""
     from d7_bot.handlers.register import cmd_register
     await cmd_register(message, state)
 
 
-# ── Fallback for unknown messages ──────────────────────────────────────────
+@router.message(F.text == BTN_ADMIN_DESIGNERS)
+async def btn_admin_designers(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_listdesigners
+    await cmd_listdesigners(message, db, config)
+
+
+@router.message(F.text == BTN_ADMIN_REPORT)
+async def btn_admin_report(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.admin import cmd_adminreport
+    await cmd_adminreport(message, db, config)
+
+
+# ── Fallback ───────────────────────────────────────────────────────────────
 
 
 @router.message()
-async def fallback_handler(message: Message, state: FSMContext) -> None:
-    """Catch all messages that aren't handled by any other router."""
+async def fallback_handler(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     current = await state.get_state()
     if current is not None:
-        # User is in some FSM flow — don't interfere, just ignore
         return
+
+    user = message.from_user
+    is_admin = await db.is_admin(user.id, config.admin_ids) if user else False
 
     await message.answer(
         "🤔 Я не понял эту команду.\n\n"
-        "Воспользуйтесь кнопками меню ниже 👇\n\n"
-        "Или введите одну из команд:\n"
-        "• /report — сдать отчёт\n"
-        "• /me — мой профиль\n"
-        "• /myreports — мои задачи\n"
-        "• /register — зарегистрироваться / обновить профиль\n"
-        "• /cancel — отменить текущее действие",
-        reply_markup=main_menu_keyboard(),
+        "Воспользуйтесь кнопками меню ниже 👇",
+        reply_markup=main_menu_keyboard(is_admin=is_admin),
     )

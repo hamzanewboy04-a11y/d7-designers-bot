@@ -47,7 +47,7 @@ async def cmd_register(message: Message, state: FSMContext) -> None:
     await message.answer(
         "📝 <b>Регистрация / обновление профиля</b>\n\n"
         "Введите ваш ник в D7:\n"
-        "<i>Допустимы: латиница, цифры, подчёркивание (3–32 символа)</i>\n\n"
+        "<i>Можно любые символы — кириллица, латиница, цифры (2–32 символа)</i>\n\n"
         "<i>В любой момент: /cancel — отменить</i>",
     )
 
@@ -58,11 +58,10 @@ async def cmd_register(message: Message, state: FSMContext) -> None:
 @router.message(RegisterStates.nick)
 async def step_nick(message: Message, state: FSMContext) -> None:
     nick = (message.text or "").strip()
-    if not re.match(r"^[\w]{3,32}$", nick):
+    if len(nick) < 2 or len(nick) > 32:
         await message.answer(
             "❌ <b>Некорректный ник.</b>\n\n"
-            "Используйте: латиницу, цифры, подчёркивание\n"
-            "Длина: от 3 до 32 символов\n\n"
+            "Длина: от 2 до 32 символов\n\n"
             "Попробуйте ещё раз:"
         )
         return
