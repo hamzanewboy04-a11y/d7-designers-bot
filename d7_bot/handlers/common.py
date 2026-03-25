@@ -34,13 +34,13 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
     if not user:
         return
 
-    first_name = user.first_name or "дизайнер"
+    first_name = user.first_name or "сотрудник"
     designer = await db.get_designer(user.id)
     is_admin = await db.is_admin(user.id, config.admin_ids)
 
     if designer:
         admin_hint = (
-            "\n• /listdesigners — все дизайнеры\n• /adminreport — отчёт за день"
+            "\n• /listdesigners — все сотрудники\n• /adminreport — отчёт за день"
             "\n• /pendingpayments — ожидающие оплаты"
         ) if is_admin else ""
         text = (
@@ -105,7 +105,7 @@ async def cmd_me(message: Message, db: Database, config: Config) -> None:
         )
         return
 
-    formats_str = ", ".join(designer.formats) if designer.formats else "—"
+    role_str = designer.role if designer.role else "—"
     wallet = designer.wallet
     wallet_display = f"{wallet[:4]}…{wallet[-4:]}" if len(wallet) > 10 else wallet
 
@@ -114,10 +114,10 @@ async def cmd_me(message: Message, db: Database, config: Config) -> None:
     admin_badge = "\n\n🔐 <b>Вы администратор</b>" if is_admin else ""
 
     await message.answer(
-        f"👤 <b>Профиль дизайнера</b>\n\n"
+        f"👤 <b>Профиль сотрудника</b>\n\n"
         f"🏷 Ник: <code>{designer.d7_nick}</code>\n"
         f"🔗 Telegram: {tg_link}\n"
-        f"🎨 Форматы: {formats_str}\n"
+        f"👔 Роль: {role_str}\n"
         f"💳 Кошелёк: <code>{wallet_display}</code>\n\n"
         f"📊 Задач за 7 дней: <b>{stats['task_count']}</b>\n"
         f"💰 Сумма за 7 дней: <b>{stats['total_usdt']:.2f} USDT</b>"

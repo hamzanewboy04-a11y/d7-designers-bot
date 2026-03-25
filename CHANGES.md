@@ -1,5 +1,85 @@
 # CHANGES.md — Список изменений
 
+## v5 — Роли, упрощённая регистрация, комментарии к оплате, уведомления
+
+### 1. Упрощена регистрация (убраны форматы/направления)
+
+- Регистрация теперь: **ник → роль → кошелёк → подтверждение**
+- Шаг выбора форматов полностью убран
+- Роль выбирается инлайн-кнопками:
+  - 🎨 Дизайнер
+  - 📱 SMM
+  - ⭐ Отзовик
+- Файлы: `d7_bot/handlers/register.py`, `d7_bot/keyboards.py`
+
+### 2. Обновлена БД — поле role
+
+- В `Designer` добавлено поле `role: str`
+- В таблице `designers` добавлена колонка `role TEXT NOT NULL DEFAULT ''`
+- Безопасная миграция через `ALTER TABLE ... ADD COLUMN role` (если отсутствует)
+- Старая колонка `formats_json` сохранена физически, но больше не используется в интерфейсе
+- `upsert_designer` и `get_designer` работают с `role` вместо `formats`
+- Файл: `d7_bot/db.py`
+
+### 3. Обновлена БД — поле payment_comment
+
+- В таблице `reports` добавлена колонка `payment_comment TEXT DEFAULT ''`
+- Безопасная миграция при старте бота
+- `update_payment_status()` принимает необязательный `payment_comment: str = ""`
+- Файл: `d7_bot/db.py`
+
+### 4. Обновлён Google Sheets
+
+- Лист `designers`: колонка `formats` заменена на `role`
+- Лист `reports`: добавлена колонка `payment_comment` в заголовок новых листов
+- `sync_designers()` выгружает `role` вместо форматов
+- `update_payment_status()` принимает и записывает `payment_comment`
+- Файл: `d7_bot/sheets.py`
+
+### 5. Уведомление сотруднику об оплате
+
+- При нажатии ✅ Оплачено сотруднику отправляется сообщение:
+  - Отчёт за дату оплачен
+  - Сумма USDT
+  - Кто подтвердил (full_name из Telegram)
+- Файл: `d7_bot/handlers/admin.py` — функция `_process_paid()`
+
+### 6. Запрос комментария при "Не оплачено"
+
+- Нажатие ⏳ Не оплачено **не сохраняет статус сразу**
+- Бот запрашивает у администратора текстовый комментарий (причину)
+- Добавлено FSM-состояние `PaymentCommentStates.waiting_comment`
+- В FSM сохраняется: `designer_id`, `report_date`, `total_usdt`, `origin_message_id`
+- После ввода комментария:
+  - Статус `unpaid` сохраняется в БД вместе с `payment_comment`
+  - Google Sheets обновляется
+  - Сотруднику отправляется сообщение с причиной
+- Файл: `d7_bot/handlers/admin.py` — `PaymentCommentStates`, `step_payment_comment()`
+
+### 7. Обновлены все интерфейсы
+
+- `/me` показывает поле «Роль» вместо форматов
+- `/listdesigners` показывает роль вместо форматов
+- `/start` обновлён (без упоминания форматов)
+- Главное меню: кнопка «👥 Дизайнеры» переименована в «👥 Сотрудники»
+- Файлы: `d7_bot/handlers/common.py`, `d7_bot/handlers/admin.py`, `d7_bot/keyboards.py`
+
+### 8. Очистка кода
+
+- Удалён `AVAILABLE_FORMATS` и `build_formats_keyboard` из keyboards.py
+- Удалены все импорты и ссылки на форматы в register.py, common.py, admin.py
+- Scheduler: `fake_designer` использует `role=""` вместо `formats=[]`
+- Файлы: `d7_bot/keyboards.py`, `d7_bot/handlers/register.py`, `d7_bot/scheduler.py`
+
+### 9. Синтаксическая проверка
+
+- Все основные файлы прошли `python -m py_compile`:
+  `db.py`, `bot.py`, `config.py`, `keyboards.py`, `scheduler.py`, `sheets.py`,
+  `handlers/__init__.py`, `handlers/admin.py`, `handlers/common.py`,
+  `handlers/register.py`, `handlers/report.py`, `main.py` — ✅ без ошибок.
+
+---
+
 ## v4 — Payment workflow, bugfixes, HTML-safety
 
 ### 1. Payment workflow (оплата отчётов)

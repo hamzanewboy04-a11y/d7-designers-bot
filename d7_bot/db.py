@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -15,7 +14,7 @@ class Designer:
     telegram_id: int
     username: str | None
     d7_nick: str
-    formats: list[str]
+    role: str
     wallet: str
 
 
@@ -36,7 +35,7 @@ class Database:
         Safe migration: handles schema changes for designers and reports tables.
         """
         async with aiosqlite.connect(self.path) as db:
-            # --- designers migration: remove experience/portfolio columns ---
+            # --- designers: add role column if absent ---
             cursor = await db.execute("PRAGMA table_info(designers)")
             columns = {row[1] for row in await cursor.fetchall()}
 
@@ -47,7 +46,8 @@ class Database:
                         telegram_id INTEGER PRIMARY KEY,
                         username TEXT,
                         d7_nick TEXT NOT NULL,
-                        formats_json TEXT NOT NULL,
+                        formats_json TEXT NOT NULL DEFAULT '[]',
+                        role TEXT NOT NULL DEFAULT '',
                         wallet TEXT NOT NULL,
                         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -59,7 +59,7 @@ class Database:
                         telegram_id,
                         username,
                         d7_nick,
-                        formats_json,
+                        COALESCE(formats_json, '[]'),
                         wallet,
                         COALESCE(created_at, CURRENT_TIMESTAMP),
                         COALESCE(updated_at, CURRENT_TIMESTAMP)
@@ -71,6 +71,17 @@ class Database:
                 """)
                 await db.commit()
                 logger.info("Designers migration complete.")
+                # refresh columns
+                cursor = await db.execute("PRAGMA table_info(designers)")
+                columns = {row[1] for row in await cursor.fetchall()}
+
+            if "role" not in columns:
+                logger.info("Migrating designers table: adding role column")
+                await db.execute(
+                    "ALTER TABLE designers ADD COLUMN role TEXT NOT NULL DEFAULT ''"
+                )
+                await db.commit()
+                logger.info("Designers role migration complete.")
 
             # --- reports migration: add payment columns if absent ---
             cursor = await db.execute("PRAGMA table_info(reports)")
@@ -86,6 +97,14 @@ class Database:
                 await db.commit()
                 logger.info("Reports payment migration complete.")
 
+            if report_cols and "payment_comment" not in report_cols:
+                logger.info("Migrating reports table: adding payment_comment column")
+                await db.execute(
+                    "ALTER TABLE reports ADD COLUMN payment_comment TEXT DEFAULT ''"
+                )
+                await db.commit()
+                logger.info("Reports payment_comment migration complete.")
+
     async def init(self) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.executescript("""
@@ -95,7 +114,8 @@ class Database:
                     telegram_id INTEGER PRIMARY KEY,
                     username TEXT,
                     d7_nick TEXT NOT NULL,
-                    formats_json TEXT NOT NULL,
+                    formats_json TEXT NOT NULL DEFAULT '[]',
+                    role TEXT NOT NULL DEFAULT '',
                     wallet TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -114,6 +134,7 @@ class Database:
                     payment_status TEXT DEFAULT 'pending',
                     paid_at TEXT,
                     paid_by INTEGER,
+                    payment_comment TEXT DEFAULT '',
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (designer_id) REFERENCES designers(telegram_id) ON DELETE CASCADE,
                     UNIQUE(designer_id, report_date, task_code)
@@ -134,12 +155,12 @@ class Database:
             await db.execute(
                 """
                 INSERT INTO designers
-                    (telegram_id, username, d7_nick, formats_json, wallet, updated_at)
+                    (telegram_id, username, d7_nick, role, wallet, updated_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(telegram_id) DO UPDATE SET
                     username      = excluded.username,
                     d7_nick       = excluded.d7_nick,
-                    formats_json  = excluded.formats_json,
+                    role          = excluded.role,
                     wallet        = excluded.wallet,
                     updated_at    = CURRENT_TIMESTAMP
                 """,
@@ -147,7 +168,7 @@ class Database:
                     designer.telegram_id,
                     designer.username,
                     designer.d7_nick,
-                    json.dumps(designer.formats, ensure_ascii=False),
+                    designer.role,
                     designer.wallet,
                 ),
             )
@@ -157,7 +178,7 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
-                SELECT telegram_id, username, d7_nick, formats_json, wallet
+                SELECT telegram_id, username, d7_nick, role, wallet
                 FROM designers WHERE telegram_id = ?
                 """,
                 (telegram_id,),
@@ -171,7 +192,7 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
-                SELECT telegram_id, username, d7_nick, formats_json, wallet
+                SELECT telegram_id, username, d7_nick, role, wallet
                 FROM designers ORDER BY d7_nick
                 """
             )
@@ -301,6 +322,7 @@ class Database:
         report_date: str,
         status: str,
         paid_by: int,
+        payment_comment: str = "",
     ) -> None:
         """Update payment_status for all tasks of a designer for a given date."""
         paid_at = datetime.utcnow().isoformat() if status == "paid" else None
@@ -309,10 +331,10 @@ class Database:
             await db.execute(
                 """
                 UPDATE reports
-                SET payment_status = ?, paid_at = ?, paid_by = ?
+                SET payment_status = ?, paid_at = ?, paid_by = ?, payment_comment = ?
                 WHERE designer_id = ? AND report_date = ?
                 """,
-                (status, paid_at, paid_by_val, designer_id, report_date),
+                (status, paid_at, paid_by_val, payment_comment, designer_id, report_date),
             )
             await db.commit()
 
@@ -368,6 +390,6 @@ def _row_to_designer(row: tuple) -> Designer:
         telegram_id=row[0],
         username=row[1],
         d7_nick=row[2],
-        formats=json.loads(row[3]),
+        role=row[3] or "",
         wallet=row[4],
     )
