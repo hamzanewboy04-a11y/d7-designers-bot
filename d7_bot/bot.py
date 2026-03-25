@@ -99,33 +99,43 @@ async def setup_handlers(dp: Dispatcher, db: Database, exporter: GoogleSheetsExp
 
     @dp.message(RegisterStates.d7_nick)
     async def reg_d7_nick(message: Message, state: FSMContext) -> None:
-        await state.update_data(d7_nick=message.text.strip())
+        text = (message.text or "").strip()
+        if not text:
+            await message.answer("Ник не должен быть пустым. Попробуйте снова:")
+            return
+        await state.update_data(d7_nick=text)
         await state.set_state(RegisterStates.experience)
         await message.answer("Опишите опыт в дизайне:")
 
     @dp.message(RegisterStates.experience)
     async def reg_experience(message: Message, state: FSMContext) -> None:
-        await state.update_data(experience=message.text.strip())
+        text = (message.text or "").strip()
+        if not text:
+            await message.answer("Опыт не должен быть пустым. Попробуйте снова:")
+            return
+        await state.update_data(experience=text)
         await state.set_state(RegisterStates.formats)
         await message.answer("Укажите форматы через запятую из списка:\n" + ", ".join(FORMATS))
 
     @dp.message(RegisterStates.formats)
     async def reg_formats(message: Message, state: FSMContext) -> None:
-        formats = [x.strip() for x in message.text.split(",") if x.strip()]
+        raw_text = message.text or ""
+        formats = [x.strip() for x in raw_text.split(",") if x.strip()]
         await state.update_data(formats=formats)
         await state.set_state(RegisterStates.portfolio)
         await message.answer("Пришлите до 5 ссылок/файлов портфолио через запятую:")
 
     @dp.message(RegisterStates.portfolio)
     async def reg_portfolio(message: Message, state: FSMContext) -> None:
-        portfolio = [x.strip() for x in message.text.split(",") if x.strip()][:5]
+        raw_text = message.text or ""
+        portfolio = [x.strip() for x in raw_text.split(",") if x.strip()][:5]
         await state.update_data(portfolio=portfolio)
         await state.set_state(RegisterStates.wallet)
         await message.answer("Укажите USDT TRC20 кошелек:")
 
     @dp.message(RegisterStates.wallet)
     async def reg_wallet(message: Message, state: FSMContext) -> None:
-        text = message.text.strip()
+        text = (message.text or "").strip()
         data = await state.get_data()
 
         if data.get("wallet") and text.casefold() == "да":
@@ -173,7 +183,7 @@ async def setup_handlers(dp: Dispatcher, db: Database, exporter: GoogleSheetsExp
 
     @dp.message(ReportStates.report_date)
     async def report_date_step(message: Message, state: FSMContext) -> None:
-        raw = message.text.strip()
+        raw = (message.text or "").strip()
         if raw.lower() == "today":
             dt = date.today()
         else:
@@ -192,7 +202,14 @@ async def setup_handlers(dp: Dispatcher, db: Database, exporter: GoogleSheetsExp
     async def report_tasks_step(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
         designer = await db.get_designer(message.from_user.id)
-        lines = [line.strip() for line in message.text.splitlines() if line.strip()]
+        if not designer:
+            await state.clear()
+            await message.answer("Профиль не найден. Используйте /register")
+            return
+
+        raw_text = message.text or ""
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        parsed_lines: list[str] = []
         added = 0
         for line in lines:
             try:
@@ -208,9 +225,10 @@ async def setup_handlers(dp: Dispatcher, db: Database, exporter: GoogleSheetsExp
                     cost_usdt=cost,
                 )
             )
+            parsed_lines.append(f"{code} {cost}")
             added += 1
-        if exporter:
-            await exporter.append_report_rows(designer, data["report_date"], lines)
+        if exporter and parsed_lines:
+            await exporter.append_report_rows(designer, data["report_date"], parsed_lines)
         await state.clear()
         await message.answer(f"Сохранено задач: {added}")
 

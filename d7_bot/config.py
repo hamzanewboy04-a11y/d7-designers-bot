@@ -16,9 +16,11 @@ class Config:
 
 
 def load_config() -> Config:
-    token = os.getenv("BOT_TOKEN", "")
+    token = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or ""
     if not token:
-        raise ValueError("BOT_TOKEN is required")
+        raise ValueError(
+            "BOT_TOKEN is required. Set BOT_TOKEN (or TELEGRAM_BOT_TOKEN) in environment variables."
+        )
 
     admin_ids_raw = os.getenv("ADMIN_IDS", "")
     admin_ids = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
