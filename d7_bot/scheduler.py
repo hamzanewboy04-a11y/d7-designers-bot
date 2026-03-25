@@ -26,14 +26,18 @@ async def scheduler_job(bot: Bot, db: Database, sheets: GoogleSheetsExporter, co
         logger.info("No tasks reported for %s.", yesterday)
         report_text = f"📊 <b>Отчёт за {yesterday.isoformat()}</b>\n\nЗаданий не найдено."
     else:
+        import html as _html
         lines: list[str] = [f"📊 <b>Отчёт за {yesterday.isoformat()}</b>\n"]
         current_nick: str | None = None
         total = 0.0
-        for d7_nick, wallet, task_code, cost_usdt in rows:
+        for d7_nick, wallet, task_code, cost_usdt, _payment_status in rows:
             if d7_nick != current_nick:
                 current_nick = d7_nick
-                lines.append(f"\n👤 <b>{d7_nick}</b> (<code>{wallet}</code>)")
-            lines.append(f"  • <code>{task_code}</code> — {cost_usdt:.2f} USDT")
+                lines.append(
+                    f"\n👤 <b>{_html.escape(str(d7_nick))}</b> "
+                    f"(<code>{_html.escape(str(wallet))}</code>)"
+                )
+            lines.append(f"  • <code>{_html.escape(str(task_code))}</code> — {cost_usdt:.2f} USDT")
             total += cost_usdt
         lines.append(f"\n💰 <b>Итого:</b> {total:.2f} USDT")
         report_text = "\n".join(lines)
@@ -59,7 +63,7 @@ async def scheduler_job(bot: Bot, db: Database, sheets: GoogleSheetsExporter, co
             from collections import defaultdict
             by_designer: dict[str, list[str]] = defaultdict(list)
             wallet_map: dict[str, str] = {}
-            for d7_nick, wallet, task_code, cost_usdt in rows:
+            for d7_nick, wallet, task_code, cost_usdt, _ps in rows:
                 by_designer[d7_nick].append(f"{task_code} {cost_usdt:.2f}")
                 wallet_map[d7_nick] = wallet
 

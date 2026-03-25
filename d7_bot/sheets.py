@@ -95,13 +95,16 @@ class GoogleSheetsExporter:
 
         def _append() -> None:
             sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
-            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=8)
+            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=12)
 
             # Check if header row exists (cell A1 is empty → write header)
             header_cell = ws.acell("A1").value
             if not header_cell:
                 ws.append_row(
-                    ["created_at", "report_date", "designer", "task_code", "cost_usdt", "wallet"]
+                    [
+                        "created_at", "report_date", "designer", "task_code",
+                        "cost_usdt", "wallet", "payment_status", "paid_at", "paid_by",
+                    ]
                 )
 
             for line in lines:
@@ -114,10 +117,62 @@ class GoogleSheetsExporter:
                 except ValueError:
                     cost = cost_str  # type: ignore[assignment]
                 ws.append_row(
-                    [now_iso, report_date, designer.d7_nick, task_code, cost, designer.wallet]
+                    [
+                        now_iso, report_date, designer.d7_nick, task_code,
+                        cost, designer.wallet, "pending", "", "",
+                    ]
                 )
 
         try:
             await self._run(_append)
         except Exception as exc:
             logger.error("GoogleSheets append_report_rows failed: %s", exc)
+
+    async def update_payment_status(
+        self,
+        designer_nick: str,
+        report_date: str,
+        status: str,
+        paid_at: str,
+        paid_by: str,
+    ) -> None:
+        """Update payment_status, paid_at, paid_by for matching rows in 'reports' sheet."""
+        client = self._get_client()
+        if not client:
+            return
+
+        def _update() -> None:
+            sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
+            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=12)
+
+            all_values = ws.get_all_values()
+            if not all_values:
+                return
+
+            header = all_values[0]
+            try:
+                col_designer = header.index("designer")
+                col_date = header.index("report_date")
+                col_status = header.index("payment_status")
+                col_paid_at = header.index("paid_at")
+                col_paid_by = header.index("paid_by")
+            except ValueError:
+                # Header not set up correctly, skip
+                return
+
+            updates = []
+            for i, row in enumerate(all_values[1:], start=2):
+                # row index in sheet is i (1-based, +1 for header)
+                if len(row) > max(col_designer, col_date):
+                    if row[col_designer] == designer_nick and row[col_date] == report_date:
+                        updates.append((i, col_status + 1, status))
+                        updates.append((i, col_paid_at + 1, paid_at))
+                        updates.append((i, col_paid_by + 1, paid_by))
+
+            for row_i, col_i, val in updates:
+                ws.update_cell(row_i, col_i, val)
+
+        try:
+            await self._run(_update)
+        except Exception as exc:
+            logger.error("GoogleSheets update_payment_status failed: %s", exc)
