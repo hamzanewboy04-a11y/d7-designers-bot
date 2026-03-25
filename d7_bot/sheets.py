@@ -59,20 +59,20 @@ class GoogleSheetsExporter:
 
         def _sync() -> None:
             sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
-            ws = self._get_or_create_worksheet(sh, "designers", rows=500, cols=10)
+            ws = self._get_or_create_worksheet(sh, "designers", rows=500, cols=8)
             rows = [
-                ["telegram_id", "username", "d7_nick", "experience", "formats", "portfolio", "wallet"]
+                ["telegram_id", "username", "d7_nick", "formats", "wallet", "updated_at"]
             ]
+            now_iso = datetime.now(tz=timezone.utc).isoformat()
             for d in designers:
                 rows.append(
                     [
                         d.telegram_id,
                         d.username or "",
                         d.d7_nick,
-                        d.experience,
                         ", ".join(d.formats),
-                        ", ".join(d.portfolio),
                         d.wallet,
+                        now_iso,
                     ]
                 )
             ws.clear()

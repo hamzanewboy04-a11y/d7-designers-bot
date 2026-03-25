@@ -36,6 +36,13 @@ async def main() -> None:
     sheets = GoogleSheetsExporter(config.google_sheet_id, config.google_service_account_json)
     if sheets.is_enabled:
         logger.info("Google Sheets integration enabled (sheet_id=%s)", config.google_sheet_id)
+        # Sync designers on startup to keep the sheet up-to-date
+        try:
+            designers = await db.list_designers()
+            await sheets.sync_designers(designers)
+            logger.info("Sheets: initial sync complete (%d designers)", len(designers))
+        except Exception as exc:
+            logger.error("Sheets: initial sync failed (bot will continue): %s", exc)
     else:
         logger.info("Google Sheets integration disabled.")
 
@@ -46,16 +53,17 @@ async def main() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Inject dependencies via middleware-like approach using workflow_data
+    # Inject dependencies via workflow_data
     dp["db"] = db
     dp["sheets"] = sheets
     dp["config"] = config
 
     # ── Routers ────────────────────────────────────────────────────────────
-    dp.include_router(common.router)
+    # Order matters: specific routers first, fallback (common) last
     dp.include_router(register.router)
     dp.include_router(report.router)
     dp.include_router(admin.router)
+    dp.include_router(common.router)  # common must be last (contains fallback handler)
 
     # ── Scheduler ─────────────────────────────────────────────────────────
     scheduler = setup_scheduler(bot, db, sheets, config)

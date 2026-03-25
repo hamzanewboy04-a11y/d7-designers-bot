@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import aiosqlite
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -12,9 +15,7 @@ class Designer:
     telegram_id: int
     username: str | None
     d7_nick: str
-    experience: str
     formats: list[str]
-    portfolio: list[str]
     wallet: str
 
 
@@ -30,6 +31,47 @@ class Database:
     def __init__(self, path: str) -> None:
         self.path = path
 
+    async def migrate(self) -> None:
+        """
+        Safe migration: if the old schema (with experience/portfolio columns)
+        exists, recreate the table without them.
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute("PRAGMA table_info(designers)")
+            columns = {row[1] for row in await cursor.fetchall()}
+
+            if "experience" in columns or "portfolio_json" in columns:
+                logger.info("Migrating designers table: removing experience/portfolio columns")
+                await db.executescript("""
+                    CREATE TABLE IF NOT EXISTS designers_new (
+                        telegram_id INTEGER PRIMARY KEY,
+                        username TEXT,
+                        d7_nick TEXT NOT NULL,
+                        formats_json TEXT NOT NULL,
+                        wallet TEXT NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    );
+
+                    INSERT INTO designers_new
+                        (telegram_id, username, d7_nick, formats_json, wallet, created_at, updated_at)
+                    SELECT
+                        telegram_id,
+                        username,
+                        d7_nick,
+                        formats_json,
+                        wallet,
+                        COALESCE(created_at, CURRENT_TIMESTAMP),
+                        COALESCE(updated_at, CURRENT_TIMESTAMP)
+                    FROM designers;
+
+                    DROP TABLE designers;
+
+                    ALTER TABLE designers_new RENAME TO designers;
+                """)
+                await db.commit()
+                logger.info("Migration complete.")
+
     async def init(self) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.executescript("""
@@ -39,9 +81,7 @@ class Database:
                     telegram_id INTEGER PRIMARY KEY,
                     username TEXT,
                     d7_nick TEXT NOT NULL,
-                    experience TEXT NOT NULL,
                     formats_json TEXT NOT NULL,
-                    portfolio_json TEXT NOT NULL,
                     wallet TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -67,6 +107,9 @@ class Database:
             """)
             await db.commit()
 
+        # Run migration after table creation (in case of old schema)
+        await self.migrate()
+
     # ── Designers ──────────────────────────────────────────────────────────
 
     async def upsert_designer(self, designer: Designer) -> None:
@@ -74,14 +117,12 @@ class Database:
             await db.execute(
                 """
                 INSERT INTO designers
-                    (telegram_id, username, d7_nick, experience, formats_json, portfolio_json, wallet, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (telegram_id, username, d7_nick, formats_json, wallet, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(telegram_id) DO UPDATE SET
                     username      = excluded.username,
                     d7_nick       = excluded.d7_nick,
-                    experience    = excluded.experience,
                     formats_json  = excluded.formats_json,
-                    portfolio_json= excluded.portfolio_json,
                     wallet        = excluded.wallet,
                     updated_at    = CURRENT_TIMESTAMP
                 """,
@@ -89,9 +130,7 @@ class Database:
                     designer.telegram_id,
                     designer.username,
                     designer.d7_nick,
-                    designer.experience,
                     json.dumps(designer.formats, ensure_ascii=False),
-                    json.dumps(designer.portfolio, ensure_ascii=False),
                     designer.wallet,
                 ),
             )
@@ -101,8 +140,7 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
-                SELECT telegram_id, username, d7_nick, experience,
-                       formats_json, portfolio_json, wallet
+                SELECT telegram_id, username, d7_nick, formats_json, wallet
                 FROM designers WHERE telegram_id = ?
                 """,
                 (telegram_id,),
@@ -116,8 +154,7 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
-                SELECT telegram_id, username, d7_nick, experience,
-                       formats_json, portfolio_json, wallet
+                SELECT telegram_id, username, d7_nick, formats_json, wallet
                 FROM designers ORDER BY d7_nick
                 """
             )
@@ -215,6 +252,26 @@ class Database:
             )
             return await cursor.fetchall()
 
+    async def get_designer_stats(self, designer_id: int, days: int = 7) -> dict:
+        """
+        Return statistics for a designer over the last *days* days.
+        Returns {"task_count": int, "total_usdt": float}
+        """
+        since = (datetime.utcnow().date() - timedelta(days=days - 1)).isoformat()
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT COUNT(*), COALESCE(SUM(cost_usdt), 0.0)
+                FROM reports
+                WHERE designer_id = ? AND report_date >= ?
+                """,
+                (designer_id, since),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return {"task_count": 0, "total_usdt": 0.0}
+            return {"task_count": int(row[0]), "total_usdt": float(row[1])}
+
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -224,8 +281,6 @@ def _row_to_designer(row: tuple) -> Designer:
         telegram_id=row[0],
         username=row[1],
         d7_nick=row[2],
-        experience=row[3],
-        formats=json.loads(row[4]),
-        portfolio=json.loads(row[5]),
-        wallet=row[6],
+        formats=json.loads(row[3]),
+        wallet=row[4],
     )

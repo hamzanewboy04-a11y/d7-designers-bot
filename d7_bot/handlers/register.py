@@ -10,7 +10,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from d7_bot.db import Database, Designer
-from d7_bot.keyboards import AVAILABLE_FORMATS, build_confirm_keyboard, build_formats_keyboard
+from d7_bot.keyboards import (
+    AVAILABLE_FORMATS,
+    build_confirm_keyboard,
+    build_formats_keyboard,
+    main_menu_keyboard,
+)
+from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
 router = Router(name="register")
@@ -26,9 +32,7 @@ def _is_valid_trc20(wallet: str) -> bool:
 
 class RegisterStates(StatesGroup):
     nick = State()
-    experience = State()
     formats = State()
-    portfolio = State()
     wallet = State()
     confirm = State()
 
@@ -41,10 +45,10 @@ async def cmd_register(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(RegisterStates.nick)
     await message.answer(
-        "📝 *Регистрация дизайнера*\n\n"
-        "Введите ваш ник в D7 (латиница, цифры, подчёркивание, 3–32 символа):\n\n"
-        "_В любой момент: /cancel — отменить_",
-        parse_mode="Markdown",
+        "📝 <b>Регистрация / обновление профиля</b>\n\n"
+        "Введите ваш ник в D7:\n"
+        "<i>Допустимы: латиница, цифры, подчёркивание (3–32 символа)</i>\n\n"
+        "<i>В любой момент: /cancel — отменить</i>",
     )
 
 
@@ -56,42 +60,31 @@ async def step_nick(message: Message, state: FSMContext) -> None:
     nick = (message.text or "").strip()
     if not re.match(r"^[\w]{3,32}$", nick):
         await message.answer(
-            "❌ Некорректный ник. Используйте латиницу, цифры, подчёркивание (3–32 символа)."
+            "❌ <b>Некорректный ник.</b>\n\n"
+            "Используйте: латиницу, цифры, подчёркивание\n"
+            "Длина: от 3 до 32 символов\n\n"
+            "Попробуйте ещё раз:"
         )
         return
-    await state.update_data(d7_nick=nick)
-    await state.set_state(RegisterStates.experience)
-    await message.answer(
-        "📋 Укажите ваш опыт работы дизайнером (например: «3 года», «6 месяцев»):"
-    )
-
-
-# ── step 2: experience ─────────────────────────────────────────────────────
-
-
-@router.message(RegisterStates.experience)
-async def step_experience(message: Message, state: FSMContext) -> None:
-    experience = (message.text or "").strip()
-    if len(experience) < 2 or len(experience) > 100:
-        await message.answer("❌ Слишком короткое или длинное описание. Попробуйте ещё раз.")
-        return
-    await state.update_data(experience=experience, selected_formats=[])
+    await state.update_data(d7_nick=nick, selected_formats=[])
     await state.set_state(RegisterStates.formats)
     await message.answer(
-        "🎨 Выберите форматы работ (нажимайте кнопки для включения/выключения).\n"
-        "Когда закончите, нажмите «Готово ➡️»:",
+        f"✅ Ник: <b>{nick}</b>\n\n"
+        "🎨 <b>Выберите форматы работ</b>\n\n"
+        "Нажимайте на кнопки для выбора/отмены.\n"
+        "Когда закончите — нажмите <b>«✅ Готово»</b>:",
         reply_markup=build_formats_keyboard([]),
     )
 
 
-# ── step 3: formats (inline toggle) ───────────────────────────────────────
+# ── step 2: formats (inline toggle) ───────────────────────────────────────
 
 
 @router.callback_query(RegisterStates.formats, F.data.startswith("fmt_toggle:"))
 async def cb_fmt_toggle(callback: CallbackQuery, state: FSMContext) -> None:
     fmt = callback.data.split(":", 1)[1]  # type: ignore[union-attr]
     if fmt not in AVAILABLE_FORMATS:
-        await callback.answer("Неизвестный формат.")
+        await callback.answer("❌ Неизвестный формат.")
         return
 
     data = await state.get_data()
@@ -99,14 +92,15 @@ async def cb_fmt_toggle(callback: CallbackQuery, state: FSMContext) -> None:
 
     if fmt in selected:
         selected.remove(fmt)
+        await callback.answer(f"☐ {fmt} убран")
     else:
         selected.append(fmt)
+        await callback.answer(f"✅ {fmt} добавлен")
 
     await state.update_data(selected_formats=selected)
     await callback.message.edit_reply_markup(  # type: ignore[union-attr]
         reply_markup=build_formats_keyboard(selected)
     )
-    await callback.answer()
 
 
 @router.callback_query(RegisterStates.formats, F.data == "fmt_done")
@@ -114,38 +108,22 @@ async def cb_fmt_done(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     selected: list[str] = data.get("selected_formats", [])
     if not selected:
-        await callback.answer("Выберите хотя бы один формат!", show_alert=True)
+        await callback.answer("⚠️ Выберите хотя бы один формат!", show_alert=True)
         return
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
-    await state.set_state(RegisterStates.portfolio)
-    await callback.message.answer(  # type: ignore[union-attr]
-        f"✅ Выбрано форматов: {len(selected)}\n\n"
-        "🔗 Введите ссылки на ваше портфолио (каждая с новой строки).\n"
-        "Можно указать Behance, Dribbble, личный сайт и т.д.:"
-    )
-
-
-# ── step 4: portfolio ──────────────────────────────────────────────────────
-
-
-@router.message(RegisterStates.portfolio)
-async def step_portfolio(message: Message, state: FSMContext) -> None:
-    raw = (message.text or "").strip()
-    portfolio = [line.strip() for line in raw.splitlines() if line.strip()]
-    if not portfolio:
-        await message.answer("❌ Укажите хотя бы одну ссылку на портфолио.")
-        return
-    await state.update_data(portfolio=portfolio)
     await state.set_state(RegisterStates.wallet)
-    await message.answer(
-        "💳 Введите ваш TRC20-кошелёк USDT\n"
-        "_(начинается с T, ровно 34 символа, base58)_:",
-        parse_mode="Markdown",
+
+    formats_display = " • ".join(selected)
+    await callback.message.answer(  # type: ignore[union-attr]
+        f"✅ Выбрано форматов: <b>{len(selected)}</b>\n"
+        f"<i>{formats_display}</i>\n\n"
+        "💳 <b>Введите ваш TRC20-кошелёк USDT</b>\n\n"
+        "<i>Начинается с «T», ровно 34 символа (base58)</i>"
     )
 
 
-# ── step 5: wallet ─────────────────────────────────────────────────────────
+# ── step 3: wallet ─────────────────────────────────────────────────────────
 
 
 @router.message(RegisterStates.wallet)
@@ -153,8 +131,11 @@ async def step_wallet(message: Message, state: FSMContext) -> None:
     wallet = (message.text or "").strip()
     if not _is_valid_trc20(wallet):
         await message.answer(
-            "❌ Некорректный TRC20-кошелёк.\n"
-            "Должен начинаться с «T», содержать ровно 34 символа base58.\n"
+            "❌ <b>Некорректный TRC20-кошелёк.</b>\n\n"
+            "Требования:\n"
+            "• Начинается с буквы «T»\n"
+            "• Ровно 34 символа\n"
+            "• Только символы base58\n\n"
             "Проверьте адрес и попробуйте снова:"
         )
         return
@@ -163,30 +144,34 @@ async def step_wallet(message: Message, state: FSMContext) -> None:
     # Build summary and ask for confirmation
     data = await state.get_data()
     formats_str = ", ".join(data["selected_formats"])
-    portfolio_str = "\n".join(f"  • {p}" for p in data["portfolio"])
+
+    # Mask wallet for display
+    wallet_display = f"{wallet[:4]}…{wallet[-4:]}"
 
     summary = (
-        "📋 *Проверьте ваши данные:*\n\n"
-        f"Ник: `{data['d7_nick']}`\n"
-        f"Опыт: {data['experience']}\n"
-        f"Форматы: {formats_str}\n"
-        f"Портфолио:\n{portfolio_str}\n"
-        f"Кошелёк: `{wallet}`\n\n"
+        "📋 <b>Проверьте ваши данные:</b>\n\n"
+        f"🏷 Ник: <code>{data['d7_nick']}</code>\n"
+        f"🎨 Форматы: {formats_str}\n"
+        f"💳 Кошелёк: <code>{wallet}</code>\n\n"
         "Всё верно?"
     )
     await state.set_state(RegisterStates.confirm)
     await message.answer(
         summary,
-        parse_mode="Markdown",
         reply_markup=build_confirm_keyboard(),
     )
 
 
-# ── step 6: confirm ────────────────────────────────────────────────────────
+# ── step 4: confirm ────────────────────────────────────────────────────────
 
 
 @router.callback_query(RegisterStates.confirm, F.data == "reg_confirm:yes")
-async def cb_confirm_yes(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
+async def cb_confirm_yes(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: Database,
+    sheets: GoogleSheetsExporter,
+) -> None:
     data = await state.get_data()
     user = callback.from_user
 
@@ -194,22 +179,29 @@ async def cb_confirm_yes(callback: CallbackQuery, state: FSMContext, db: Databas
         telegram_id=user.id,
         username=user.username,
         d7_nick=data["d7_nick"],
-        experience=data["experience"],
         formats=data["selected_formats"],
-        portfolio=data["portfolio"],
         wallet=data["wallet"],
     )
     await db.upsert_designer(designer)
     await state.clear()
 
     await callback.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
-    await callback.answer("Профиль сохранён!")
+    await callback.answer("✅ Профиль сохранён!")
     await callback.message.answer(  # type: ignore[union-attr]
-        f"✅ Профиль *{designer.d7_nick}* успешно сохранён!\n\n"
-        "Теперь вы можете сдавать отчёты: /report",
-        parse_mode="Markdown",
+        f"🎉 <b>Профиль {designer.d7_nick} успешно сохранён!</b>\n\n"
+        f"Теперь вы можете сдавать отчёты 👇",
+        reply_markup=main_menu_keyboard(),
     )
     logger.info("Designer registered/updated: %s (tg_id=%s)", designer.d7_nick, user.id)
+
+    # Sync to Google Sheets
+    if sheets.is_enabled:
+        try:
+            all_designers = await db.list_designers()
+            await sheets.sync_designers(all_designers)
+            logger.info("Sheets synced after designer update: %s", designer.d7_nick)
+        except Exception as exc:
+            logger.error("Sheets sync failed after registration: %s", exc)
 
 
 @router.callback_query(RegisterStates.confirm, F.data == "reg_confirm:no")
@@ -218,5 +210,7 @@ async def cb_confirm_no(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
     await callback.message.answer(  # type: ignore[union-attr]
-        "✏️ Регистрация отменена. Начните заново: /register"
+        "✏️ Регистрация отменена.\n\n"
+        "Начните заново: /register или нажмите кнопку меню 👇",
+        reply_markup=main_menu_keyboard(),
     )
