@@ -10,20 +10,12 @@ from aiogram.types import CallbackQuery, Message
 from d7_bot.config import Config
 from d7_bot.db import Database
 from d7_bot.keyboards import (
-    BTN_ADMIN_ANALYTICS_DAY,
-    BTN_ADMIN_ANALYTICS_MONTH,
-    BTN_ADMIN_ANALYTICS_WEEK,
-    BTN_ADMIN_DASHBOARD,
-    BTN_ADMIN_DESIGNERS,
-    BTN_ADMIN_MISSED,
-    BTN_ADMIN_PAID_TODAY,
-    BTN_ADMIN_PAID_WEEK,
-    BTN_ADMIN_PENDING,
-    BTN_ADMIN_REPORT,
+    BTN_ADMIN_HUB,
     BTN_EDIT,
     BTN_PROFILE,
     BTN_REPORT,
     BTN_TASKS,
+    admin_hub_keyboard,
     main_menu_keyboard,
     period_keyboard,
 )
@@ -47,21 +39,16 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
 
     if designer:
         admin_hint = (
-            "\n• /listdesigners [role] — все сотрудники\n• /adminreport — отчёт за день"
-            "\n• /pendingpayments — ожидающие оплаты"
-            "\n• /missedreports — кто не сдал за вчера"
-            "\n• /paidtoday — выплачено сегодня"
-            "\n• /paidweek — выплачено за 7 дней"
-            "\n• /employeehistory &lt;id&gt; — история сотрудника"
-            "\n• /dashboard — сводный dashboard"
-            "\n• /analyticsday — аналитика за сегодня"
-            "\n• /analyticsweek — аналитика за 7 дней"
-            "\n• /analyticsmonth — аналитика за 30 дней"
-            "\n• /analyticsfrom YYYY-MM-DD YYYY-MM-DD — за произвольный период"
+            "\n\n<b>Команды для администратора:</b>\n"
+            "• Кнопка <b>🛠 Админка</b> — полная панель управления\n"
+            "• /dashboard — сводный дашборд\n"
+            "• /listdesigners [role] — все сотрудники\n"
+            "• /adminreport — отчёт за день\n"
+            "• /pendingpayments — ожидающие оплаты\n"
+            "• /employeehistory &lt;id&gt; — история сотрудника"
         ) if is_admin else ""
         text = (
             f"👋 Привет, <b>{first_name}</b>!\n\n"
-            f"Я помогаю команде D7 вести учёт задач.\n\n"
             f"Добро пожаловать обратно, <b>{designer.d7_nick}</b>! 👇\n\n"
             f"Команды:\n"
             f"• /report — сдать отчёт\n"
@@ -253,67 +240,21 @@ async def btn_edit(message: Message, state: FSMContext) -> None:
     await cmd_register(message, state)
 
 
-@router.message(F.text == BTN_ADMIN_DESIGNERS)
-async def btn_admin_designers(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_listdesigners
-    await cmd_listdesigners(message, db, config)
+# ── v8: Admin hub button handler ───────────────────────────────────────────
 
 
-@router.message(F.text == BTN_ADMIN_REPORT)
-async def btn_admin_report(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_adminreport
-    await cmd_adminreport(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_PENDING)
-async def btn_admin_pending(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_pendingpayments
-    await cmd_pendingpayments(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_PAID_TODAY)
-async def btn_admin_paid_today(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_paidtoday
-    await cmd_paidtoday(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_PAID_WEEK)
-async def btn_admin_paid_week(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_paidweek
-    await cmd_paidweek(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_MISSED)
-async def btn_admin_missed(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_missedreports
-    await cmd_missedreports(message, db, config)
-
-
-# ── v7: admin analytics and dashboard button handlers ──────────────────────
-
-
-@router.message(F.text == BTN_ADMIN_DASHBOARD)
-async def btn_admin_dashboard(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_dashboard
-    await cmd_dashboard(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_ANALYTICS_DAY)
-async def btn_admin_analytics_day(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_analyticsday
-    await cmd_analyticsday(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_ANALYTICS_WEEK)
-async def btn_admin_analytics_week(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_analyticsweek
-    await cmd_analyticsweek(message, db, config)
-
-
-@router.message(F.text == BTN_ADMIN_ANALYTICS_MONTH)
-async def btn_admin_analytics_month(message: Message, db: Database, config: Config) -> None:
-    from d7_bot.handlers.admin import cmd_analyticsmonth
-    await cmd_analyticsmonth(message, db, config)
+@router.message(F.text == BTN_ADMIN_HUB)
+async def btn_admin_hub(message: Message, db: Database, config: Config) -> None:
+    user = message.from_user
+    if not user:
+        return
+    if not await db.is_admin(user.id, config.admin_ids):
+        await message.answer("⛔ Недостаточно прав.")
+        return
+    await message.answer(
+        "🛠 <b>Панель администратора</b>\n\nВыберите раздел:",
+        reply_markup=admin_hub_keyboard(),
+    )
 
 
 # ── Fallback ───────────────────────────────────────────────────────────────

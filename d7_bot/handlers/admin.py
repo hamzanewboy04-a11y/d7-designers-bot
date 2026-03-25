@@ -14,7 +14,16 @@ from aiogram.types import CallbackQuery, Message
 
 from d7_bot.config import Config
 from d7_bot.db import Database
-from d7_bot.keyboards import ROLE_LABELS, payment_keyboard
+from d7_bot.keyboards import (
+    ROLE_LABELS,
+    admin_analytics_keyboard,
+    admin_employees_keyboard,
+    admin_hub_keyboard,
+    admin_payments_keyboard,
+    admin_reports_keyboard,
+    back_to_hub_keyboard,
+    payment_keyboard,
+)
 from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
@@ -784,6 +793,450 @@ async def step_payment_comment(
         "Payment UNPAID: designer=%s date=%s by admin=%s comment=%r",
         designer_id, report_date, user.id, comment,
     )
+
+
+# ── v8: Inline Admin Hub callbacks ─────────────────────────────────────────
+
+
+@router.callback_query(F.data.startswith("admin:"))
+async def cb_admin_hub(
+    callback: CallbackQuery,
+    db: Database,
+    config: Config,
+) -> None:
+    """Route all admin: callback data to the appropriate handler."""
+    if not await _check_admin_cb(callback, db, config):
+        return
+
+    action = (callback.data or "").removeprefix("admin:")
+    await callback.answer()
+
+    # ── Navigation ────────────────────────────────────────────────────────
+    if action == "home":
+        await _hub_edit_or_send(callback, "🛠 <b>Панель администратора</b>\n\nВыберите раздел:", admin_hub_keyboard())
+        return
+
+    if action == "employees":
+        await _hub_edit_or_send(callback, "👥 <b>Сотрудники</b>\n\nВыберите подраздел:", admin_employees_keyboard())
+        return
+
+    if action == "payments":
+        await _hub_edit_or_send(callback, "💸 <b>Выплаты</b>\n\nВыберите подраздел:", admin_payments_keyboard())
+        return
+
+    if action == "analytics":
+        await _hub_edit_or_send(callback, "📊 <b>Аналитика</b>\n\nВыберите подраздел:", admin_analytics_keyboard())
+        return
+
+    if action == "reports":
+        await _hub_edit_or_send(callback, "⏰ <b>Отчёты</b>\n\nВыберите подраздел:", admin_reports_keyboard())
+        return
+
+    # ── Dashboard ─────────────────────────────────────────────────────────
+    if action == "dashboard":
+        text = await _build_dashboard_text(db)
+        await _hub_edit_or_send(callback, text, back_to_hub_keyboard())
+        return
+
+    # ── Employees sub-actions ─────────────────────────────────────────────
+    if action == "emp:all":
+        text = await _build_employees_text(db, None)
+        await _hub_edit_or_send(callback, text, admin_employees_keyboard())
+        return
+
+    if action in ("emp:designer", "emp:smm", "emp:reviewer"):
+        role = action.split(":")[1]
+        text = await _build_employees_text(db, role)
+        await _hub_edit_or_send(callback, text, admin_employees_keyboard())
+        return
+
+    if action == "emp:rank7":
+        text = await _build_ranking_text(db, 7)
+        await _hub_edit_or_send(callback, text, admin_employees_keyboard())
+        return
+
+    if action == "emp:rank30":
+        text = await _build_ranking_text(db, 30)
+        await _hub_edit_or_send(callback, text, admin_employees_keyboard())
+        return
+
+    # ── Payment sub-actions ───────────────────────────────────────────────
+    if action == "pay:pending":
+        text = await _build_pending_text(db)
+        await _hub_edit_or_send(callback, text, admin_payments_keyboard())
+        return
+
+    if action == "pay:today":
+        text = await _build_paid_text(db, days=1, label="сегодня")
+        await _hub_edit_or_send(callback, text, admin_payments_keyboard())
+        return
+
+    if action == "pay:week":
+        text = await _build_paid_text(db, days=7, label="за 7 дней")
+        await _hub_edit_or_send(callback, text, admin_payments_keyboard())
+        return
+
+    if action == "pay:history":
+        text = (
+            "📋 <b>История выплат сотрудника</b>\n\n"
+            "Используйте команду:\n"
+            "<code>/employeehistory &lt;telegram_id&gt;</code>\n\n"
+            "Пример: <code>/employeehistory 123456789</code>"
+        )
+        await _hub_edit_or_send(callback, text, admin_payments_keyboard())
+        return
+
+    # ── Analytics sub-actions ─────────────────────────────────────────────
+    if action == "an:today":
+        today = date.today().isoformat()
+        text = await _build_analytics_text(db, today, today, "за сегодня")
+        await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
+        return
+
+    if action == "an:7d":
+        end = date.today()
+        start = end - timedelta(days=6)
+        text = await _build_analytics_text(db, start.isoformat(), end.isoformat(), "за 7 дней")
+        await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
+        return
+
+    if action == "an:30d":
+        end = date.today()
+        start = end - timedelta(days=29)
+        text = await _build_analytics_text(db, start.isoformat(), end.isoformat(), "за 30 дней")
+        await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
+        return
+
+    if action == "an:geo7":
+        end = date.today()
+        start = end - timedelta(days=6)
+        text = await _build_geo_ranking_text(db, start.isoformat(), end.isoformat())
+        await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
+        return
+
+    if action == "an:roles7":
+        end = date.today()
+        start = end - timedelta(days=6)
+        text = await _build_roles_text(db, start.isoformat(), end.isoformat())
+        await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
+        return
+
+    if action == "an:cpd7":
+        end = date.today()
+        start = end - timedelta(days=6)
+        text = await _build_cost_per_day_text(db, start.isoformat(), end.isoformat())
+        await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
+        return
+
+    # ── Reports sub-actions ───────────────────────────────────────────────
+    if action == "rep:missed":
+        yesterday = date.today() - timedelta(days=1)
+        text = await _get_missed_text(db, yesterday)
+        await _hub_edit_or_send(callback, text, admin_reports_keyboard())
+        return
+
+    if action == "rep:day":
+        yesterday = date.today() - timedelta(days=1)
+        text = await _build_adminreport_text(db, yesterday)
+        await _hub_edit_or_send(callback, text, admin_reports_keyboard())
+        return
+
+    if action == "rep:schedule":
+        text = (
+            "ℹ️ <b>Логика напоминаний</b>\n\n"
+            "🕗 <b>08:00 МСК</b> — личное напоминание каждому сотруднику сдать отчёт до 12:00 МСК\n\n"
+            "🕛 <b>12:00 МСК</b> — сводка администраторам: кто не сдал отчёт за вчера"
+        )
+        await _hub_edit_or_send(callback, text, admin_reports_keyboard())
+        return
+
+
+# ── Hub helper: edit message or send new ──────────────────────────────────
+
+
+async def _hub_edit_or_send(
+    callback: CallbackQuery,
+    text: str,
+    markup,
+) -> None:
+    """Try to edit the existing message; fall back to sending a new one."""
+    try:
+        if callback.message:
+            await callback.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        if callback.message:
+            await callback.message.answer(text, reply_markup=markup)
+
+
+# ── Builder helpers ────────────────────────────────────────────────────────
+
+
+async def _build_dashboard_text(db: Database) -> str:
+    """Build the dashboard text (same as /dashboard command)."""
+    today_msk = datetime.now(tz=_MOSCOW).date()
+    yesterday = today_msk - timedelta(days=1)
+    week_start = today_msk - timedelta(days=6)
+
+    role_counts = await db.count_designers_by_role()
+    total_employees = role_counts.get("__total__", 0)
+    designer_count = role_counts.get("designer", 0)
+    smm_count = role_counts.get("smm", 0)
+    reviewer_count = role_counts.get("reviewer", 0)
+
+    pending = await db.get_pending_payments_summary()
+
+    paid_today_rows = await db.get_paid_summary(today_msk)
+    paid_today_sum = sum(float(r[4]) for r in paid_today_rows)
+    paid_today_count = len(paid_today_rows)
+
+    paid_week_rows = await db.get_paid_summary(week_start)
+    paid_week_sum = sum(float(r[4]) for r in paid_week_rows)
+    paid_week_count = len(paid_week_rows)
+
+    missing = await db.list_missing_reports(yesterday)
+    missed_count = len(missing)
+
+    analytics_today = await db.get_analytics_summary(today_msk.isoformat(), today_msk.isoformat())
+    analytics_week = await db.get_analytics_summary(week_start.isoformat(), today_msk.isoformat())
+
+    lines: list[str] = [
+        "📌 <b>DASHBOARD</b>",
+        f"📅 <code>{html.escape(today_msk.isoformat())}</code> (МСК)\n",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "👥 <b>Сотрудники</b>",
+        f"  Всего: <b>{total_employees}</b>",
+        f"  🎨 Дизайнеров: {designer_count}",
+        f"  📱 SMM: {smm_count}",
+        f"  ⭐ Отзовиков: {reviewer_count}",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "💸 <b>Оплаты</b>",
+        f"  ⏳ Ожидают: <b>{pending['count']} зап. / {pending['total_usdt']:.2f} USDT</b>",
+        f"  ✅ Выплачено сегодня: {paid_today_count} зап. / <b>{paid_today_sum:.2f} USDT</b>",
+        f"  📈 Выплачено за 7 дн: {paid_week_count} зап. / <b>{paid_week_sum:.2f} USDT</b>",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"⏰ <b>Не сдали за вчера ({html.escape(yesterday.isoformat())}):</b> {missed_count} чел.",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "📉 <b>Аналитика сегодня</b>",
+        f"  💰 {analytics_today['total_usdt']:.2f} USDT ({analytics_today['task_count']} задач)",
+        f"  🌍 GEO: {analytics_today['geo_usdt']:.2f} USDT",
+        f"  🎨 Visual: {analytics_today['visual_usdt']:.2f} USDT",
+        "",
+        "📈 <b>Аналитика 7 дней</b>",
+        f"  💰 {analytics_week['total_usdt']:.2f} USDT ({analytics_week['task_count']} задач)",
+        f"  🌍 GEO: {analytics_week['geo_usdt']:.2f} USDT",
+        f"  🎨 Visual: {analytics_week['visual_usdt']:.2f} USDT",
+    ]
+    return "\n".join(lines)
+
+
+async def _build_employees_text(db: Database, role: str | None) -> str:
+    designers = await db.list_designers_by_role(role)
+    if role:
+        role_label = ROLE_LABELS.get(role, role)
+        header = f"👥 <b>Сотрудники — {html.escape(role_label)} ({len(designers)}):</b>"
+    else:
+        header = f"👥 <b>Список сотрудников ({len(designers)}):</b>"
+
+    if not designers:
+        return header + "\n\nНикого не найдено."
+
+    entries: list[str] = [header]
+    for d in designers:
+        role_lbl = ROLE_LABELS.get(d.role, d.role) if d.role else "—"
+        tg_ref = f"@{html.escape(d.username)}" if d.username else f"id{d.telegram_id}"
+        entries.append(
+            f"\n• <b>{html.escape(d.d7_nick)}</b> ({tg_ref})"
+            f" — {html.escape(role_lbl)}"
+            f"\n  💳 <code>{html.escape(d.wallet)}</code>"
+        )
+
+    text = "\n".join(entries)
+    # Truncate gracefully if too long for inline edit
+    if len(text) > 3800:
+        text = text[:3750] + "\n\n<i>…список обрезан, используйте /listdesigners</i>"
+    return text
+
+
+async def _build_ranking_text(db: Database, days: int) -> str:
+    ranking = await db.get_employee_ranking(days)
+    if not ranking:
+        return f"🏆 <b>Рейтинг за {days} дней</b>\n\nДанных пока нет."
+
+    lines = [f"🏆 <b>Рейтинг сотрудников за {days} дней</b>\n"]
+    for i, emp in enumerate(ranking, 1):
+        role_lbl = ROLE_LABELS.get(emp["role"], emp["role"]) if emp["role"] else "—"
+        medal = "🥇" if i == 1 else ("🥈" if i == 2 else ("🥉" if i == 3 else f"{i}."))
+        lines.append(
+            f"{medal} <b>{html.escape(emp['d7_nick'])}</b> ({html.escape(role_lbl)})\n"
+            f"   💰 {emp['total_usdt']:.2f} USDT  •  {emp['task_count']} задач"
+        )
+    return "\n".join(lines)
+
+
+async def _build_pending_text(db: Database) -> str:
+    rows = await db.get_pending_payments()
+    if not rows:
+        return "✅ Нет ожидающих оплаты отчётов.\n\n<i>Используйте /pendingpayments для управления оплатой.</i>"
+
+    total_sum = sum(float(r[5]) for r in rows)
+    lines = [
+        f"⏳ <b>Ожидают оплаты: {len(rows)} записей</b>",
+        f"💰 Сумма: <b>{total_sum:.2f} USDT</b>\n",
+        "<i>Для подтверждения оплаты используйте /pendingpayments</i>",
+        "",
+    ]
+    for designer_id, d7_nick, wallet, report_date, task_count, total_usdt in rows[:10]:
+        wallet_s = html.escape(str(wallet))
+        short_wallet = f"{wallet_s[:4]}…{wallet_s[-4:]}" if len(wallet_s) > 10 else wallet_s
+        lines.append(
+            f"• <b>{html.escape(str(d7_nick))}</b> | {html.escape(str(report_date))}\n"
+            f"  {task_count} зад. / {float(total_usdt):.2f} USDT | <code>{short_wallet}</code>"
+        )
+    if len(rows) > 10:
+        lines.append(f"\n<i>…и ещё {len(rows) - 10} записей</i>")
+    return "\n".join(lines)
+
+
+async def _build_paid_text(db: Database, days: int, label: str) -> str:
+    from collections import defaultdict
+    today_msk = datetime.now(tz=_MOSCOW).date()
+    since_date = today_msk - timedelta(days=days - 1)
+    rows = await db.get_paid_summary(since_date)
+    if not rows:
+        return f"💸 Нет оплаченных отчётов {html.escape(label)}."
+
+    total_sum = sum(float(r[4]) for r in rows)
+    total_entries = sum(int(r[3]) for r in rows)
+    lines = [
+        f"✅ <b>Выплачено {html.escape(label)}:</b>",
+        f"  {total_entries} записей / <b>{total_sum:.2f} USDT</b>\n",
+    ]
+    by_nick: dict = defaultdict(lambda: {"entries": 0, "sum": 0.0})
+    for _, d7_nick, report_date, task_count, total_usdt in rows:
+        by_nick[d7_nick]["entries"] += task_count
+        by_nick[d7_nick]["sum"] += total_usdt
+    for nick, info in sorted(by_nick.items()):
+        lines.append(
+            f"👤 <b>{html.escape(nick)}</b> — {info['entries']} зад. / {info['sum']:.2f} USDT"
+        )
+    return "\n".join(lines)
+
+
+async def _build_analytics_text(db: Database, start_date: str, end_date: str, label: str) -> str:
+    summary = await db.get_analytics_summary(start_date, end_date)
+    geo_breakdown = await db.get_geo_breakdown(start_date, end_date)
+
+    lines = [
+        f"📊 <b>Аналитика {html.escape(label)}</b>",
+        f"📅 <code>{html.escape(start_date)}</code> — <code>{html.escape(end_date)}</code>\n",
+        f"💰 <b>Общая сумма: {summary['total_usdt']:.2f} USDT</b>",
+        f"🌍 GEO creatives: <b>{summary['geo_usdt']:.2f} USDT</b>",
+        f"🎨 Visuals: <b>{summary['visual_usdt']:.2f} USDT</b>",
+        f"📋 Всего задач: {summary['task_count']}",
+    ]
+    if geo_breakdown:
+        lines.append("\n🗺 <b>Разбивка по GEO:</b>")
+        for item in geo_breakdown:
+            lines.append(
+                f"  • {html.escape(item['geo'] or '—')}: <b>{item['usdt']:.2f} USDT</b> ({item['count']} зад.)"
+            )
+    elif summary["task_count"] == 0:
+        lines.append("\n<i>Данных за период не найдено.</i>")
+    return "\n".join(lines)
+
+
+async def _build_geo_ranking_text(db: Database, start_date: str, end_date: str) -> str:
+    rows = await db.get_geo_ranking(start_date, end_date)
+    if not rows:
+        return "🗺 <b>Топ по GEO (7 дней)</b>\n\nДанных пока нет."
+
+    lines = ["🗺 <b>Топ по GEO — 7 дней</b> (по сумме)\n"]
+    for i, item in enumerate(rows, 1):
+        lines.append(
+            f"{i}. <b>{html.escape(item['geo'])}</b> — {item['total_usdt']:.2f} USDT ({item['task_count']} зад.)"
+        )
+    return "\n".join(lines)
+
+
+async def _build_roles_text(db: Database, start_date: str, end_date: str) -> str:
+    rows = await db.get_role_spend_breakdown(start_date, end_date)
+    if not rows:
+        return "👔 <b>Топ по ролям (7 дней)</b>\n\nДанных пока нет."
+
+    lines = ["👔 <b>Топ по ролям — 7 дней</b> (по сумме)\n"]
+    for i, item in enumerate(rows, 1):
+        role_lbl = ROLE_LABELS.get(item["role"], item["role"]) if item["role"] else "—"
+        lines.append(
+            f"{i}. <b>{html.escape(role_lbl)}</b> — {item['total_usdt']:.2f} USDT ({item['task_count']} зад.)"
+        )
+    return "\n".join(lines)
+
+
+async def _build_cost_per_day_text(db: Database, start_date: str, end_date: str) -> str:
+    rows = await db.get_cost_per_day_breakdown(start_date, end_date)
+    if not rows:
+        return "💵 <b>Стоимость дня (7 дней)</b>\n\nДанных пока нет."
+
+    lines = [
+        "💵 <b>Стоимость дня по направлению — 7 дней</b>\n",
+        "<i>Формула: общая сумма / кол-во уникальных дней</i>\n",
+    ]
+    for item in rows:
+        lines.append(
+            f"• <b>{html.escape(item['geo'])}</b>: {item['cost_per_day']:.2f} USDT/день"
+            f"  <i>({item['total_usdt']:.2f} USDT / {item['day_count']} дн.)</i>"
+        )
+    return "\n".join(lines)
+
+
+async def _build_adminreport_text(db: Database, report_date: date) -> str:
+    """Build admin report text for a given date."""
+    rows = await db.list_tasks_by_date(report_date)
+    date_str_safe = html.escape(report_date.isoformat())
+    if not rows:
+        return f"📊 За <b>{date_str_safe}</b> задач не найдено."
+
+    lines: list[str] = [f"📊 <b>Отчёт за {date_str_safe}</b>\n"]
+    current_nick: str | None = None
+    day_total = 0.0
+    total = 0.0
+    current_payment: str = "pending"
+
+    for d7_nick, wallet, task_code, cost_usdt, payment_status in rows:
+        nick_safe = html.escape(str(d7_nick))
+        wallet_safe = html.escape(str(wallet))
+        code_safe = html.escape(str(task_code))
+
+        if d7_nick != current_nick:
+            if current_nick is not None:
+                pay_icon = _payment_icon(current_payment)
+                lines.append(f"  <i>Итого: {day_total:.2f} USDT {pay_icon}</i>")
+            current_nick = d7_nick
+            current_payment = payment_status or "pending"
+            day_total = 0.0
+            lines.append(f"\n👤 <b>{nick_safe}</b> (<code>{wallet_safe}</code>)")
+        else:
+            if payment_status == "pending":
+                current_payment = "pending"
+            elif payment_status == "unpaid" and current_payment != "pending":
+                current_payment = "unpaid"
+
+        lines.append(f"  • <code>{code_safe}</code> — {cost_usdt:.2f} USDT")
+        day_total += cost_usdt
+        total += cost_usdt
+
+    if current_nick is not None:
+        pay_icon = _payment_icon(current_payment)
+        lines.append(f"  <i>Итого: {day_total:.2f} USDT {pay_icon}</i>")
+
+    lines.append(f"\n💰 <b>Итого за день: {total:.2f} USDT</b>")
+    text = "\n".join(lines)
+    if len(text) > 3800:
+        text = text[:3750] + "\n\n<i>…используйте /adminreport для полного отчёта</i>"
+    return text
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
