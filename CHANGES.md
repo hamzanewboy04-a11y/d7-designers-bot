@@ -1,5 +1,84 @@
 # CHANGES.md — Список изменений
 
+## v8 — Inline Admin Hub, расширенная аналитика
+
+### 1. Упрощённое главное меню (keyboards.py)
+
+- Постоянная клавиатура для обычных пользователей: только 4 кнопки:
+  `📝 Сдать отчёт`, `👤 Мой профиль`, `📋 Мои задачи`, `✏️ Редактировать профиль`
+- Для администраторов добавлена единственная дополнительная кнопка: `🛠 Админка`
+- Все старые admin reply-кнопки убраны из persistent keyboard (константы сохранены для обратной совместимости)
+- Новая константа `BTN_ADMIN_HUB = "🛠 Админка"`
+
+### 2. Inline Admin Hub (keyboards.py + admin.py)
+
+- По кнопке `🛠 Админка` открывается inline-меню с 5 разделами:
+  `📌 Dashboard`, `👥 Сотрудники`, `💸 Выплаты`, `📊 Аналитика`, `⏰ Отчёты`
+- Каждый раздел — отдельное inline submenu с кнопкой `🔙 Назад` (возврат в hub)
+- Навигация полностью inline: основной раздел ↔ подменю ↔ контент ↔ назад
+- Новые функции клавиатур: `admin_hub_keyboard()`, `admin_employees_keyboard()`,
+  `admin_payments_keyboard()`, `admin_analytics_keyboard()`, `admin_reports_keyboard()`,
+  `back_to_hub_keyboard()`
+
+### 3. Секции Inline Admin Hub (admin.py)
+
+**Dashboard** — сводка (идентично /dashboard)
+
+**Сотрудники:**
+- Все сотрудники / Дизайнеры / SMM / Отзовики
+- Рейтинг 7 дней / Рейтинг 30 дней (топ по сумме и кол-ву задач, медали 🥇🥈🥉)
+
+**Выплаты:**
+- Ожидают оплаты (с кратким списком + инструкция /pendingpayments для действий)
+- Выплачено сегодня / Выплачено 7 дней
+- История сотрудника → инструкция `/employeehistory <telegram_id>`
+
+**Аналитика:**
+- Сегодня / 7 дней / 30 дней
+- Топ по GEO 7 дней — страны по сумме убыв.
+- Топ по ролям 7 дней — designer/smm/reviewer по сумме убыв.
+- Стоимость дня 7 дней — `total_sum / count(distinct report_date)` по каждому GEO
+
+**Отчёты:**
+- Кто не сдал вчера
+- Отчёт за день (вчера)
+- Напоминание логика — информационный текст про 08:00 и 12:00 МСК
+
+### 4. Новые методы DB (db.py)
+
+- `get_employee_ranking(days: int)` — рейтинг сотрудников за период (сумма + задачи)
+- `get_role_spend_breakdown(start_date, end_date)` — разбивка расходов по ролям
+- `get_geo_ranking(start_date, end_date)` — топ GEO по сумме
+- `get_cost_per_day_breakdown(start_date, end_date)` — стоимость дня по GEO
+
+### 5. Callback routing (admin.py)
+
+- Единый роутер `cb_admin_hub` на `admin:*` callback data
+- Все действия: навигация, данные, подменю — в одном обработчике с чистым dispatch
+- `_hub_edit_or_send()` — надёжное редактирование/отправка с fallback
+
+### 6. Безопасность вывода
+
+- Все пользовательские строки проходят через `html.escape()`
+- Длинные тексты обрезаются с подсказкой использовать slash-команду
+- Нет parse_mode конфликтов
+
+### 7. Старые slash-команды сохранены
+
+- Все `/dashboard`, `/listdesigners`, `/adminreport`, `/pendingpayments`,
+  `/missedreports`, `/paidtoday`, `/paidweek`, `/employeehistory`,
+  `/analyticsday`, `/analyticsweek`, `/analyticsmonth`, `/analyticsfrom` — работают как прежде
+- Обработчики reply-кнопок в common.py убраны только для старых admin кнопок (которые убраны из клавиатуры)
+
+### 8. Синтаксическая проверка
+
+- Все основные файлы прошли `python3 -m py_compile`:
+  `db.py`, `bot.py`, `config.py`, `keyboards.py`, `scheduler.py`, `sheets.py`,
+  `handlers/__init__.py`, `handlers/admin.py`, `handlers/common.py`,
+  `handlers/register.py`, `handlers/report.py`, `main.py` — ✅ без ошибок.
+
+---
+
 ## v7 — Строгие коды задач, аналитика, dashboard
 
 ### 1. Строгая валидация кодов задач (report.py)

@@ -653,6 +653,137 @@ class Database:
                 "total_usdt": float(row[1]) if row else 0.0,
             }
 
+    # ── v8 Analytics ─────────────────────────────────────────────────────────
+
+    async def get_employee_ranking(self, days: int) -> list[dict]:
+        """
+        Return employee ranking for the last `days` days.
+        Each entry: {"d7_nick": str, "role": str, "total_usdt": float, "task_count": int}
+        Sorted by total_usdt descending.
+        """
+        since = (datetime.utcnow().date() - timedelta(days=days - 1)).isoformat()
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT d.d7_nick, d.role,
+                       COALESCE(SUM(r.cost_usdt), 0.0) AS total_usdt,
+                       COUNT(*) AS task_count
+                FROM reports r
+                JOIN designers d ON d.telegram_id = r.designer_id
+                WHERE r.report_date >= ?
+                GROUP BY r.designer_id
+                ORDER BY total_usdt DESC
+                """,
+                (since,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "d7_nick": row[0],
+                    "role": row[1] or "",
+                    "total_usdt": float(row[2]),
+                    "task_count": int(row[3]),
+                }
+                for row in rows
+            ]
+
+    async def get_role_spend_breakdown(self, start_date: str, end_date: str) -> list[dict]:
+        """
+        Return spend breakdown by designer role.
+        Each entry: {"role": str, "total_usdt": float, "task_count": int}
+        Sorted by total_usdt descending.
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT d.role,
+                       COALESCE(SUM(r.cost_usdt), 0.0) AS total_usdt,
+                       COUNT(*) AS task_count
+                FROM reports r
+                JOIN designers d ON d.telegram_id = r.designer_id
+                WHERE r.report_date >= ? AND r.report_date <= ?
+                GROUP BY d.role
+                ORDER BY total_usdt DESC
+                """,
+                (start_date, end_date),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "role": row[0] or "",
+                    "total_usdt": float(row[1]),
+                    "task_count": int(row[2]),
+                }
+                for row in rows
+            ]
+
+    async def get_geo_ranking(self, start_date: str, end_date: str) -> list[dict]:
+        """
+        Return spend breakdown by task_geo, sorted by total_usdt descending.
+        Each entry: {"geo": str, "total_usdt": float, "task_count": int}
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT task_geo,
+                       COALESCE(SUM(cost_usdt), 0.0) AS total_usdt,
+                       COUNT(*) AS task_count
+                FROM reports
+                WHERE report_date >= ? AND report_date <= ?
+                  AND task_geo != ''
+                GROUP BY task_geo
+                ORDER BY total_usdt DESC
+                """,
+                (start_date, end_date),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "geo": row[0],
+                    "total_usdt": float(row[1]),
+                    "task_count": int(row[2]),
+                }
+                for row in rows
+            ]
+
+    async def get_cost_per_day_breakdown(self, start_date: str, end_date: str) -> list[dict]:
+        """
+        Return cost-per-day breakdown by task_geo (direction).
+        cost_per_day = total_sum / count(distinct report_date) for that geo.
+        Each entry: {"geo": str, "total_usdt": float, "day_count": int, "cost_per_day": float}
+        Sorted by cost_per_day descending.
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT task_geo,
+                       COALESCE(SUM(cost_usdt), 0.0) AS total_usdt,
+                       COUNT(DISTINCT report_date) AS day_count
+                FROM reports
+                WHERE report_date >= ? AND report_date <= ?
+                  AND task_geo != ''
+                GROUP BY task_geo
+                ORDER BY (COALESCE(SUM(cost_usdt), 0.0) / MAX(COUNT(DISTINCT report_date), 1)) DESC
+                """,
+                (start_date, end_date),
+            )
+            rows = await cursor.fetchall()
+            result = []
+            for row in rows:
+                geo = row[0]
+                total = float(row[1])
+                days = int(row[2]) if row[2] else 1
+                result.append(
+                    {
+                        "geo": geo,
+                        "total_usdt": total,
+                        "day_count": days,
+                        "cost_per_day": total / days if days > 0 else 0.0,
+                    }
+                )
+            result.sort(key=lambda x: x["cost_per_day"], reverse=True)
+            return result
+
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
