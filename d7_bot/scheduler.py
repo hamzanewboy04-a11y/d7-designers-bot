@@ -24,32 +24,36 @@ async def scheduler_job(bot: Bot, db: Database, sheets: GoogleSheetsExporter, co
     rows = await db.list_tasks_by_date(yesterday)
     if not rows:
         logger.info("No tasks reported for %s.", yesterday)
-        report_text = f"📊 *Отчёт за {yesterday.isoformat()}*\n\nЗаданий не найдено."
+        report_text = f"📊 <b>Отчёт за {yesterday.isoformat()}</b>\n\nЗаданий не найдено."
     else:
-        lines: list[str] = [f"📊 *Отчёт за {yesterday.isoformat()}*\n"]
+        lines: list[str] = [f"📊 <b>Отчёт за {yesterday.isoformat()}</b>\n"]
         current_nick: str | None = None
         total = 0.0
         for d7_nick, wallet, task_code, cost_usdt in rows:
             if d7_nick != current_nick:
                 current_nick = d7_nick
-                lines.append(f"\n👤 *{d7_nick}* (`{wallet}`)")
-            lines.append(f"  • `{task_code}` — {cost_usdt:.2f} USDT")
+                lines.append(f"\n👤 <b>{d7_nick}</b> (<code>{wallet}</code>)")
+            lines.append(f"  • <code>{task_code}</code> — {cost_usdt:.2f} USDT")
             total += cost_usdt
-        lines.append(f"\n💰 *Итого:* {total:.2f} USDT")
+        lines.append(f"\n💰 <b>Итого:</b> {total:.2f} USDT")
         report_text = "\n".join(lines)
 
     # Send to config admins + DB admins
     admin_ids = set(config.admin_ids) | set(await db.list_admins())
     for admin_id in admin_ids:
         try:
-            await bot.send_message(admin_id, report_text, parse_mode="Markdown")
+            await bot.send_message(admin_id, report_text)
         except Exception as exc:
             logger.warning("Could not send daily report to admin %s: %s", admin_id, exc)
 
     # Sync to Google Sheets
     if sheets.is_enabled:
         designers = await db.list_designers()
-        await sheets.sync_designers(designers)
+        try:
+            await sheets.sync_designers(designers)
+        except Exception as exc:
+            logger.error("Sheets sync_designers failed in scheduler: %s", exc)
+
         if rows:
             # Group rows by designer for sheets exporter
             from collections import defaultdict
@@ -60,18 +64,18 @@ async def scheduler_job(bot: Bot, db: Database, sheets: GoogleSheetsExporter, co
                 wallet_map[d7_nick] = wallet
 
             for nick, task_lines in by_designer.items():
-                # Build a fake Designer for the exporter
                 from d7_bot.db import Designer as Des
                 fake_designer = Des(
                     telegram_id=0,
                     username=None,
                     d7_nick=nick,
-                    experience="",
                     formats=[],
-                    portfolio=[],
                     wallet=wallet_map[nick],
                 )
-                await sheets.append_report_rows(fake_designer, yesterday.isoformat(), task_lines)
+                try:
+                    await sheets.append_report_rows(fake_designer, yesterday.isoformat(), task_lines)
+                except Exception as exc:
+                    logger.error("Sheets append_report_rows failed for %s: %s", nick, exc)
 
 
 def setup_scheduler(
