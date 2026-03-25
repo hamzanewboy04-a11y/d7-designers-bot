@@ -5,12 +5,15 @@ import json
 import logging
 from datetime import datetime, timezone
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import gspread
 from google.oauth2.service_account import Credentials
 
 from d7_bot.db import Designer
+
+if TYPE_CHECKING:
+    from d7_bot.handlers.report import ParsedTask
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,7 @@ class GoogleSheetsExporter:
         return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 
     def _get_or_create_worksheet(
-        self, sh: gspread.Spreadsheet, title: str, rows: int = 1000, cols: int = 10
+        self, sh: gspread.Spreadsheet, title: str, rows: int = 1000, cols: int = 13
     ) -> gspread.Worksheet:
         existing_titles = [w.title for w in sh.worksheets()]
         if title in existing_titles:
@@ -84,9 +87,12 @@ class GoogleSheetsExporter:
             logger.error("GoogleSheets sync_designers failed: %s", exc)
 
     async def append_report_rows(
-        self, designer: Designer, report_date: str, lines: list[str]
+        self,
+        designer: Designer,
+        report_date: str,
+        parsed_tasks: list["ParsedTask"],
     ) -> None:
-        """Append task rows to the 'reports' sheet."""
+        """Append task rows to the 'reports' sheet (v7: includes task_prefix/group/geo)."""
         client = self._get_client()
         if not client:
             return
@@ -95,7 +101,7 @@ class GoogleSheetsExporter:
 
         def _append() -> None:
             sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
-            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=12)
+            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=13)
 
             # Check if header row exists (cell A1 is empty → write header)
             header_cell = ws.acell("A1").value
@@ -104,23 +110,26 @@ class GoogleSheetsExporter:
                     [
                         "created_at", "report_date", "designer", "task_code",
                         "cost_usdt", "wallet", "payment_status", "paid_at", "paid_by",
-                        "payment_comment",
+                        "payment_comment", "task_prefix", "task_group", "task_geo",
                     ]
                 )
 
-            for line in lines:
-                parts = line.split(maxsplit=1)
-                if len(parts) != 2:
-                    continue
-                task_code, cost_str = parts
-                try:
-                    cost = float(cost_str)
-                except ValueError:
-                    cost = cost_str  # type: ignore[assignment]
+            for pt in parsed_tasks:
                 ws.append_row(
                     [
-                        now_iso, report_date, designer.d7_nick, task_code,
-                        cost, designer.wallet, "pending", "", "", "",
+                        now_iso,
+                        report_date,
+                        designer.d7_nick,
+                        pt.task_code,
+                        pt.cost_usdt,
+                        designer.wallet,
+                        "pending",
+                        "",
+                        "",
+                        "",
+                        pt.task_prefix,
+                        pt.task_group,
+                        pt.task_geo,
                     ]
                 )
 
@@ -145,7 +154,7 @@ class GoogleSheetsExporter:
 
         def _update() -> None:
             sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
-            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=12)
+            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=13)
 
             all_values = ws.get_all_values()
             if not all_values:

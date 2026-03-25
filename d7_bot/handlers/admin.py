@@ -4,6 +4,8 @@ import html
 import logging
 from datetime import date, datetime, timedelta, timezone
 
+import zoneinfo
+
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -17,6 +19,8 @@ from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin")
+
+_MOSCOW = zoneinfo.ZoneInfo("Europe/Moscow")
 
 
 class PaymentCommentStates(StatesGroup):
@@ -335,11 +339,7 @@ async def _send_paid_summary(
     message: Message, db: Database, days: int, label: str
 ) -> None:
     """Send a paid summary for the last `days` days (Moscow date)."""
-    from datetime import timezone as _tz
-    import zoneinfo
-
-    moscow = zoneinfo.ZoneInfo("Europe/Moscow")
-    today_msk = datetime.now(tz=moscow).date()
+    today_msk = datetime.now(tz=_MOSCOW).date()
     since_date = today_msk - timedelta(days=days - 1)
 
     rows = await db.get_paid_summary(since_date)
@@ -378,31 +378,6 @@ async def _send_paid_summary(
         await message.answer(text)
 
 
-def _payment_icon(status: str) -> str:
-    if status == "paid":
-        return "✅"
-    if status == "unpaid":
-        return "❌"
-    return "⏳"
-
-
-def _split_text(text: str, max_len: int) -> list[str]:
-    """Split text into chunks by newline without cutting mid-line."""
-    parts: list[str] = []
-    current: list[str] = []
-    current_len = 0
-    for line in text.split("\n"):
-        if current_len + len(line) + 1 > max_len and current:
-            parts.append("\n".join(current))
-            current = []
-            current_len = 0
-        current.append(line)
-        current_len += len(line) + 1
-    if current:
-        parts.append("\n".join(current))
-    return parts
-
-
 # ── /pendingpayments ───────────────────────────────────────────────────────
 
 
@@ -436,6 +411,172 @@ async def cmd_pendingpayments(message: Message, db: Database, config: Config) ->
             text,
             reply_markup=payment_keyboard(designer_id, report_date),
         )
+
+
+# ── /analyticsday /analyticsweek /analyticsmonth /analyticsfrom ────────────
+
+
+async def _send_analytics(message: Message, db: Database, start_date: str, end_date: str, label: str) -> None:
+    """Build and send analytics message for the given date range."""
+    summary = await db.get_analytics_summary(start_date, end_date)
+    geo_breakdown = await db.get_geo_breakdown(start_date, end_date)
+
+    label_safe = html.escape(label)
+    lines: list[str] = [
+        f"📊 <b>Аналитика {label_safe}</b>",
+        f"📅 <code>{html.escape(start_date)}</code> — <code>{html.escape(end_date)}</code>\n",
+        f"💰 <b>Общая сумма: {summary['total_usdt']:.2f} USDT</b>",
+        f"🌍 GEO creatives: <b>{summary['geo_usdt']:.2f} USDT</b>",
+        f"🎨 Visuals: <b>{summary['visual_usdt']:.2f} USDT</b>",
+        f"📋 Всего задач: {summary['task_count']}",
+    ]
+
+    if geo_breakdown:
+        lines.append("\n🗺 <b>Разбивка по GEO:</b>")
+        for item in geo_breakdown:
+            geo_safe = html.escape(item["geo"] or "—")
+            lines.append(f"  • {geo_safe}: <b>{item['usdt']:.2f} USDT</b> ({item['count']} зад.)")
+
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        for chunk in _split_text(text, 4000):
+            await message.answer(chunk)
+    else:
+        await message.answer(text)
+
+
+@router.message(Command("analyticsday"))
+async def cmd_analyticsday(message: Message, db: Database, config: Config) -> None:
+    if not await _check_admin(message, db, config):
+        return
+    today = date.today().isoformat()
+    await _send_analytics(message, db, today, today, "за сегодня")
+
+
+@router.message(Command("analyticsweek"))
+async def cmd_analyticsweek(message: Message, db: Database, config: Config) -> None:
+    if not await _check_admin(message, db, config):
+        return
+    end = date.today()
+    start = end - timedelta(days=6)
+    await _send_analytics(message, db, start.isoformat(), end.isoformat(), "за 7 дней")
+
+
+@router.message(Command("analyticsmonth"))
+async def cmd_analyticsmonth(message: Message, db: Database, config: Config) -> None:
+    if not await _check_admin(message, db, config):
+        return
+    end = date.today()
+    start = end - timedelta(days=29)
+    await _send_analytics(message, db, start.isoformat(), end.isoformat(), "за 30 дней")
+
+
+@router.message(Command("analyticsfrom"))
+async def cmd_analyticsfrom(message: Message, db: Database, config: Config) -> None:
+    if not await _check_admin(message, db, config):
+        return
+
+    args = (message.text or "").split()
+    if len(args) < 3:
+        await message.answer(
+            "Использование: /analyticsfrom YYYY-MM-DD YYYY-MM-DD\n"
+            "Пример: <code>/analyticsfrom 2024-01-01 2024-01-31</code>"
+        )
+        return
+
+    try:
+        start = date.fromisoformat(args[1])
+        end = date.fromisoformat(args[2])
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат дат. Используйте YYYY-MM-DD.\n"
+            "Пример: <code>/analyticsfrom 2024-01-01 2024-01-31</code>"
+        )
+        return
+
+    if start > end:
+        await message.answer("❌ Начальная дата не может быть позже конечной.")
+        return
+
+    label = f"с {start.isoformat()} по {end.isoformat()}"
+    await _send_analytics(message, db, start.isoformat(), end.isoformat(), label)
+
+
+# ── /dashboard ─────────────────────────────────────────────────────────────
+
+
+@router.message(Command("dashboard"))
+async def cmd_dashboard(message: Message, db: Database, config: Config) -> None:
+    if not await _check_admin(message, db, config):
+        return
+
+    # Gather all data
+    today_msk = datetime.now(tz=_MOSCOW).date()
+    yesterday = today_msk - timedelta(days=1)
+    week_start = today_msk - timedelta(days=6)
+
+    # Designers stats
+    role_counts = await db.count_designers_by_role()
+    total_employees = role_counts.get("__total__", 0)
+    designer_count = role_counts.get("designer", 0)
+    smm_count = role_counts.get("smm", 0)
+    reviewer_count = role_counts.get("reviewer", 0)
+
+    # Pending payments
+    pending = await db.get_pending_payments_summary()
+
+    # Paid today
+    paid_today_rows = await db.get_paid_summary(today_msk)
+    paid_today_sum = sum(float(r[4]) for r in paid_today_rows)
+    paid_today_count = len(paid_today_rows)
+
+    # Paid this week
+    paid_week_rows = await db.get_paid_summary(week_start)
+    paid_week_sum = sum(float(r[4]) for r in paid_week_rows)
+    paid_week_count = len(paid_week_rows)
+
+    # Who missed yesterday
+    missing = await db.list_missing_reports(yesterday)
+    missed_count = len(missing)
+
+    # Analytics today
+    analytics_today = await db.get_analytics_summary(today_msk.isoformat(), today_msk.isoformat())
+
+    # Analytics this week
+    analytics_week = await db.get_analytics_summary(week_start.isoformat(), today_msk.isoformat())
+
+    lines: list[str] = [
+        "📊 <b>DASHBOARD</b>",
+        f"📅 <code>{html.escape(today_msk.isoformat())}</code> (МСК)\n",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "👥 <b>Сотрудники</b>",
+        f"  Всего: <b>{total_employees}</b>",
+        f"  🎨 Дизайнеров: {designer_count}",
+        f"  📱 SMM: {smm_count}",
+        f"  ⭐ Отзовиков: {reviewer_count}",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "💸 <b>Оплаты</b>",
+        f"  ⏳ Ожидают: <b>{pending['count']} записей / {pending['total_usdt']:.2f} USDT</b>",
+        f"  ✅ Выплачено сегодня: {paid_today_count} зап. / <b>{paid_today_sum:.2f} USDT</b>",
+        f"  📈 Выплачено за 7 дн: {paid_week_count} зап. / <b>{paid_week_sum:.2f} USDT</b>",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"⏰ <b>Не сдали за вчера ({html.escape(yesterday.isoformat())}):</b> {missed_count} чел.",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "📉 <b>Аналитика сегодня</b>",
+        f"  💰 {analytics_today['total_usdt']:.2f} USDT ({analytics_today['task_count']} задач)",
+        f"  🌍 GEO: {analytics_today['geo_usdt']:.2f} USDT",
+        f"  🎨 Visual: {analytics_today['visual_usdt']:.2f} USDT",
+        "",
+        "📈 <b>Аналитика 7 дней</b>",
+        f"  💰 {analytics_week['total_usdt']:.2f} USDT ({analytics_week['task_count']} задач)",
+        f"  🌍 GEO: {analytics_week['geo_usdt']:.2f} USDT",
+        f"  🎨 Visual: {analytics_week['visual_usdt']:.2f} USDT",
+    ]
+
+    await message.answer("\n".join(lines))
 
 
 # ── Payment callback ───────────────────────────────────────────────────────
@@ -643,3 +784,31 @@ async def step_payment_comment(
         "Payment UNPAID: designer=%s date=%s by admin=%s comment=%r",
         designer_id, report_date, user.id, comment,
     )
+
+
+# ── helpers ────────────────────────────────────────────────────────────────
+
+
+def _payment_icon(status: str) -> str:
+    if status == "paid":
+        return "✅"
+    if status == "unpaid":
+        return "❌"
+    return "⏳"
+
+
+def _split_text(text: str, max_len: int) -> list[str]:
+    """Split text into chunks by newline without cutting mid-line."""
+    parts: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for line in text.split("\n"):
+        if current_len + len(line) + 1 > max_len and current:
+            parts.append("\n".join(current))
+            current = []
+            current_len = 0
+        current.append(line)
+        current_len += len(line) + 1
+    if current:
+        parts.append("\n".join(current))
+    return parts

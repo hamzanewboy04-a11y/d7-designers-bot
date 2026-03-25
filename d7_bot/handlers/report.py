@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from datetime import date, timedelta
+from typing import NamedTuple
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
@@ -17,6 +19,89 @@ from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
 router = Router(name="report")
+
+# ── Task code validation ───────────────────────────────────────────────────
+
+# Allowed prefixes and their groups/geos
+_GEO_PREFIXES = {"OTHER", "PERU2", "PERU1", "ITALY", "ARG", "CHILE"}
+_VISUAL_PREFIXES = {"V"}
+_ALL_PREFIXES = _GEO_PREFIXES | _VISUAL_PREFIXES
+
+# Pattern: PREFIX-<digits>
+_TASK_CODE_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)$")
+
+_ALLOWED_PREFIXES_DISPLAY = "OTHER, PERU1, PERU2, ITALY, ARG, CHILE, V"
+
+
+class ParsedTask(NamedTuple):
+    task_code: str
+    cost_usdt: float
+    task_prefix: str
+    task_group: str
+    task_geo: str
+
+
+def parse_task_line(line: str) -> ParsedTask | str:
+    """
+    Parse a single task input line "TASK_CODE COST".
+    Returns ParsedTask on success, or an error string on failure.
+    """
+    parts = line.split(maxsplit=1)
+    if len(parts) != 2:
+        return (
+            f"❌ <code>{html.escape(line)}</code> — неверный формат. "
+            f"Ожидается: <code>КОД_ЗАДАЧИ СТОИМОСТЬ</code>"
+        )
+
+    task_code_raw, cost_str = parts
+    task_code = task_code_raw.upper()
+
+    # Validate cost first (so we can give a clear error)
+    try:
+        cost_usdt = float(cost_str.replace(",", "."))
+        if cost_usdt <= 0:
+            raise ValueError("non-positive")
+    except ValueError:
+        return (
+            f"❌ <code>{html.escape(line)}</code> — некорректная стоимость. "
+            f"Ожидается положительное число."
+        )
+
+    # Validate task code format
+    m = _TASK_CODE_RE.match(task_code)
+    if not m:
+        return (
+            f"❌ <code>{html.escape(task_code_raw)}</code> {html.escape(cost_str)} — "
+            f"неверный формат кода задачи. "
+            f"Ожидается: <code>ПРЕФИКС-ЦИФРЫ</code>, например <code>OTHER-1234</code>"
+        )
+
+    prefix = m.group(1)
+
+    if prefix not in _ALL_PREFIXES:
+        return (
+            f"❌ <code>{html.escape(task_code_raw)}</code> {html.escape(cost_str)} — "
+            f"неизвестный префикс. "
+            f"Допустимо: {_ALLOWED_PREFIXES_DISPLAY}"
+        )
+
+    if prefix in _GEO_PREFIXES:
+        task_group = "geo"
+        task_geo = prefix
+    else:
+        task_group = "visual"
+        task_geo = ""
+
+    return ParsedTask(
+        task_code=task_code,
+        cost_usdt=cost_usdt,
+        task_prefix=prefix,
+        task_group=task_group,
+        task_geo=task_geo,
+    )
+
+
+# ── FSM states ─────────────────────────────────────────────────────────────
 
 
 class ReportStates(StatesGroup):
@@ -55,6 +140,18 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
 
 # ── Date selection callbacks ───────────────────────────────────────────────
 
+_TASK_FORMAT_HINT = (
+    "Введите задачи в формате:\n"
+    "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
+    "Каждая задача — с новой строки. Допустимые префиксы:\n"
+    f"<code>{_ALLOWED_PREFIXES_DISPLAY}</code>\n\n"
+    "Примеры:\n"
+    "<code>OTHER-1234 12.50\n"
+    "PERU1-5678 8.00\n"
+    "V-1001 5.00</code>\n\n"
+    "<i>/cancel — отменить</i>"
+)
+
 
 @router.callback_query(ReportStates.choose_date, F.data == "report_date:yesterday")
 async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext) -> None:
@@ -63,13 +160,7 @@ async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ReportStates.tasks)
     await callback.answer()
     await callback.message.edit_text(  # type: ignore[union-attr]
-        f"📝 <b>Отчёт за вчера ({yesterday})</b>\n\n"
-        "Введите задачи в формате:\n"
-        "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
-        "Каждая задача — с новой строки. Пример:\n"
-        "<code>D7-101 12.50\n"
-        "D7-102 8.00</code>\n\n"
-        "<i>/cancel — отменить</i>"
+        f"📝 <b>Отчёт за вчера ({yesterday})</b>\n\n" + _TASK_FORMAT_HINT
     )
 
 
@@ -80,13 +171,7 @@ async def cb_date_today(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ReportStates.tasks)
     await callback.answer()
     await callback.message.edit_text(  # type: ignore[union-attr]
-        f"📝 <b>Отчёт за сегодня ({today})</b>\n\n"
-        "Введите задачи в формате:\n"
-        "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
-        "Каждая задача — с новой строки. Пример:\n"
-        "<code>D7-101 12.50\n"
-        "D7-102 8.00</code>\n\n"
-        "<i>/cancel — отменить</i>"
+        f"📝 <b>Отчёт за сегодня ({today})</b>\n\n" + _TASK_FORMAT_HINT
     )
 
 
@@ -120,13 +205,7 @@ async def step_custom_date(message: Message, state: FSMContext) -> None:
     await state.update_data(report_date=report_date)
     await state.set_state(ReportStates.tasks)
     await message.answer(
-        f"📝 <b>Отчёт за {report_date}</b>\n\n"
-        "Введите задачи в формате:\n"
-        "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
-        "Каждая задача — с новой строки. Пример:\n"
-        "<code>D7-101 12.50\n"
-        "D7-102 8.00</code>\n\n"
-        "<i>/cancel — отменить</i>"
+        f"📝 <b>Отчёт за {report_date}</b>\n\n" + _TASK_FORMAT_HINT
     )
 
 
@@ -167,46 +246,40 @@ async def step_tasks(
 
     lines = [line.strip() for line in raw.splitlines() if line.strip()]
 
-    accepted: list[str] = []
+    accepted: list[ParsedTask] = []
     duplicates: list[str] = []
     errors: list[str] = []
 
     for line in lines:
-        parts = line.split(maxsplit=1)
-        if len(parts) != 2:
-            errors.append(f"• <code>{html.escape(line)}</code> — неверный формат")
-            continue
-        task_code, cost_str = parts
-        try:
-            cost_usdt = float(cost_str.replace(",", "."))
-            if cost_usdt <= 0:
-                raise ValueError("non-positive")
-        except ValueError:
-            errors.append(f"• <code>{html.escape(line)}</code> — некорректная стоимость")
+        result = parse_task_line(line)
+        if isinstance(result, str):
+            # It's an error message
+            errors.append(result)
             continue
 
+        parsed = result
         task = TaskEntry(
             designer_id=user.id,
             report_date=report_date,
-            task_code=task_code,
-            cost_usdt=cost_usdt,
+            task_code=parsed.task_code,
+            cost_usdt=parsed.cost_usdt,
+            task_prefix=parsed.task_prefix,
+            task_group=parsed.task_group,
+            task_geo=parsed.task_geo,
         )
         added = await db.add_task(task)
         if added:
-            accepted.append(line)
+            accepted.append(parsed)
         else:
             duplicates.append(
-                f"• <code>{html.escape(task_code)}</code> — уже сдана за {html.escape(report_date)}"
+                f"• <code>{html.escape(parsed.task_code)}</code> — уже сдана за {html.escape(report_date)}"
             )
 
     # Build response
     parts_resp: list[str] = []
 
     if accepted:
-        total_accepted = sum(
-            float(ln.split(maxsplit=1)[1].replace(",", "."))
-            for ln in accepted
-        )
+        total_accepted = sum(p.cost_usdt for p in accepted)
         parts_resp.append(
             f"✅ <b>Принято задач: {len(accepted)}</b>\n"
             f"💰 Сумма: {total_accepted:.2f} USDT\n"
@@ -216,9 +289,9 @@ async def step_tasks(
         parts_resp.append("⚠️ <b>Дубликаты (пропущены):</b>\n" + "\n".join(duplicates))
     if errors:
         parts_resp.append(
-            "❌ <b>Ошибки формата:</b>\n"
+            "❌ <b>Ошибки:</b>\n"
             + "\n".join(errors)
-            + "\n\n<i>Формат: КОД_ЗАДАЧИ СТОИМОСТЬ</i>"
+            + f"\n\n<i>Допустимые префиксы: {_ALLOWED_PREFIXES_DISPLAY}</i>"
         )
 
     if not accepted and not duplicates and not errors:
@@ -244,10 +317,7 @@ async def step_tasks(
 
     # Notify admins about the new report with payment buttons
     if accepted:
-        total_accepted = sum(
-            float(ln.split(maxsplit=1)[1].replace(",", "."))
-            for ln in accepted
-        )
+        total_accepted = sum(p.cost_usdt for p in accepted)
         nick_safe = html.escape(designer.d7_nick)
         wallet_safe = html.escape(designer.wallet)
         date_safe = html.escape(report_date)
