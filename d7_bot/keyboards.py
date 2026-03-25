@@ -7,18 +7,11 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-# All available design formats
-AVAILABLE_FORMATS: list[str] = [
-    "Логотип",
-    "Баннер",
-    "Социальные сети",
-    "Презентация",
-    "Полиграфия",
-    "UI/UX",
-    "Иллюстрация",
-    "Моушн",
-    "Видео",
-    "Другое",
+# Available roles for registration
+AVAILABLE_ROLES: list[tuple[str, str]] = [
+    ("🎨 Дизайнер", "designer"),
+    ("📱 SMM", "smm"),
+    ("⭐ Отзовик", "reviewer"),
 ]
 
 # Text labels for main menu buttons (used to match incoming messages)
@@ -27,7 +20,7 @@ BTN_PROFILE = "👤 Мой профиль"
 BTN_TASKS = "📋 Мои задачи"
 BTN_EDIT = "✏️ Редактировать профиль"
 
-BTN_ADMIN_DESIGNERS = "👥 Дизайнеры"
+BTN_ADMIN_DESIGNERS = "👥 Сотрудники"
 BTN_ADMIN_REPORT = "📊 Отчёт за день"
 BTN_ADMIN_PENDING = "💸 Ожидают оплаты"
 
@@ -87,32 +80,13 @@ def period_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def build_formats_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
-    """
-    Build an inline keyboard for format selection.
-
-    Each format shows ✅ if selected or ☐ if not.
-    A "Готово ➡️" button is added at the end.
-    Callback data pattern:  "fmt_toggle:<format_name>"
-    Done button callback:   "fmt_done"
-    """
+def build_role_keyboard() -> InlineKeyboardMarkup:
+    """Inline keyboard for role selection during registration."""
     buttons: list[list[InlineKeyboardButton]] = []
-
-    for fmt in AVAILABLE_FORMATS:
-        icon = "✅" if fmt in selected else "☐"
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{icon} {fmt}",
-                    callback_data=f"fmt_toggle:{fmt}",
-                )
-            ]
-        )
-
-    buttons.append(
-        [InlineKeyboardButton(text="✅ Готово", callback_data="fmt_done")]
-    )
-
+    for label, value in AVAILABLE_ROLES:
+        buttons.append([
+            InlineKeyboardButton(text=label, callback_data=f"role_select:{value}")
+        ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

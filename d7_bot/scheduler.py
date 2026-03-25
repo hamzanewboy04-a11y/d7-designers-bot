@@ -73,7 +73,7 @@ async def scheduler_job(bot: Bot, db: Database, sheets: GoogleSheetsExporter, co
                     telegram_id=0,
                     username=None,
                     d7_nick=nick,
-                    formats=[],
+                    role="",
                     wallet=wallet_map[nick],
                 )
                 try:

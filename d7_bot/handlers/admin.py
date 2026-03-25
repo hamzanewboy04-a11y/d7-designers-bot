@@ -4,8 +4,10 @@ import html
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from d7_bot.config import Config
@@ -15,6 +17,10 @@ from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin")
+
+
+class PaymentCommentStates(StatesGroup):
+    waiting_comment = State()
 
 
 async def _check_admin(message: Message, db: Database, config: Config) -> bool:
@@ -81,13 +87,13 @@ async def cmd_listdesigners(message: Message, db: Database, config: Config) -> N
 
     designers = await db.list_designers()
     if not designers:
-        await message.answer("Дизайнеров пока нет.")
+        await message.answer("Сотрудников пока нет.")
         return
 
-    header = f"👥 <b>Список дизайнеров ({len(designers)}):</b>\n"
+    header = f"👥 <b>Список сотрудников ({len(designers)}):</b>\n"
     entries: list[str] = []
     for d in designers:
-        formats_str = html.escape(", ".join(d.formats)) if d.formats else "—"
+        role_str = html.escape(d.role) if d.role else "—"
         nick_safe = html.escape(d.d7_nick)
         wallet_safe = html.escape(d.wallet)
         if d.username:
@@ -96,7 +102,7 @@ async def cmd_listdesigners(message: Message, db: Database, config: Config) -> N
             tg_link = f"id{d.telegram_id}"
         entries.append(
             f"• <b>{nick_safe}</b> ({tg_link})\n"
-            f"  Форматы: {formats_str}\n"
+            f"  Роль: {role_str}\n"
             f"  Кошелёк: <code>{wallet_safe}</code>"
         )
 
@@ -189,7 +195,6 @@ async def cmd_adminreport(message: Message, db: Database, config: Config) -> Non
     if len(text) <= 4000:
         await message.answer(text)
     else:
-        # Split by designer blocks
         for chunk in _split_text(text, 4000):
             await message.answer(chunk)
 
@@ -259,7 +264,12 @@ async def cmd_pendingpayments(message: Message, db: Database, config: Config) ->
 
 @router.callback_query(F.data.startswith("pay:"))
 async def cb_payment(
-    callback: CallbackQuery, db: Database, config: Config, sheets: GoogleSheetsExporter
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: Database,
+    config: Config,
+    sheets: GoogleSheetsExporter,
+    bot: Bot,
 ) -> None:
     if not await _check_admin_cb(callback, db, config):
         return
@@ -282,9 +292,57 @@ async def cb_payment(
         return
 
     admin_id = callback.from_user.id
-    await db.update_payment_status(designer_id, report_date, status, admin_id)
 
-    status_text = "✅ Оплачено" if status == "paid" else "⏳ Не оплачено"
+    if status == "paid":
+        # Process payment immediately
+        await _process_paid(
+            callback=callback,
+            db=db,
+            sheets=sheets,
+            bot=bot,
+            designer_id=designer_id,
+            report_date=report_date,
+            admin_id=admin_id,
+        )
+    else:
+        # status == "unpaid": ask admin for a comment first
+        summary = await db.get_report_summary(designer_id, report_date)
+        total_usdt = summary.get("total_usdt", 0.0)
+
+        # Save context in FSM
+        await state.update_data(
+            unpaid_designer_id=designer_id,
+            unpaid_report_date=report_date,
+            unpaid_total_usdt=total_usdt,
+            unpaid_origin_message_id=callback.message.message_id if callback.message else None,
+        )
+        await state.set_state(PaymentCommentStates.waiting_comment)
+        await callback.answer()
+        await callback.message.answer(  # type: ignore[union-attr]
+            "💬 <b>Укажите причину, почему отчёт не оплачен:</b>\n\n"
+            f"Дата: <b>{html.escape(report_date)}</b>\n"
+            f"Сумма: <b>{total_usdt:.2f} USDT</b>\n\n"
+            "<i>Введите комментарий и нажмите отправить. /cancel — отменить.</i>"
+        )
+
+
+async def _process_paid(
+    callback: CallbackQuery,
+    db: Database,
+    sheets: GoogleSheetsExporter,
+    bot: Bot,
+    designer_id: int,
+    report_date: str,
+    admin_id: int,
+) -> None:
+    """Handle the 'paid' status: update DB, notify designer, update message."""
+    await db.update_payment_status(designer_id, report_date, "paid", admin_id)
+
+    # Get summary for notification
+    summary = await db.get_report_summary(designer_id, report_date)
+    total_usdt = summary.get("total_usdt", 0.0)
+
+    status_text = "✅ Оплачено"
     await callback.answer(f"Статус обновлён: {status_text}", show_alert=False)
 
     # Update the message to reflect new status (remove buttons)
@@ -296,20 +354,113 @@ async def cb_payment(
         except Exception:
             pass
 
+    # Notify the designer
+    try:
+        admin_info = await bot.get_chat(admin_id)
+        admin_name = admin_info.full_name or f"id{admin_id}"
+    except Exception:
+        admin_name = f"id{admin_id}"
+
+    try:
+        await bot.send_message(
+            designer_id,
+            f"✅ <b>Отчёт оплачен!</b>\n\n"
+            f"📅 Дата: <b>{html.escape(report_date)}</b>\n"
+            f"💰 Сумма: <b>{total_usdt:.2f} USDT</b>\n"
+            f"👤 Подтвердил: {html.escape(admin_name)}",
+        )
+    except Exception as exc:
+        logger.warning("Could not notify designer %s about payment: %s", designer_id, exc)
+
     # Sync payment status to Google Sheets
     if sheets.is_enabled:
         designer = await db.get_designer(designer_id)
         if designer:
-            paid_at = datetime.now(tz=timezone.utc).isoformat() if status == "paid" else ""
-            paid_by_str = str(admin_id) if status == "paid" else ""
+            paid_at = datetime.now(tz=timezone.utc).isoformat()
+            paid_by_str = str(admin_id)
             try:
                 await sheets.update_payment_status(
-                    designer.d7_nick, report_date, status, paid_at, paid_by_str
+                    designer.d7_nick, report_date, "paid", paid_at, paid_by_str, ""
                 )
             except Exception as exc:
                 logger.error("Sheets payment update failed: %s", exc)
 
     logger.info(
-        "Payment status updated: designer=%s date=%s status=%s by admin=%s",
-        designer_id, report_date, status, admin_id,
+        "Payment PAID: designer=%s date=%s by admin=%s",
+        designer_id, report_date, admin_id,
+    )
+
+
+# ── FSM: admin enters unpaid comment ──────────────────────────────────────
+
+
+@router.message(PaymentCommentStates.waiting_comment)
+async def step_payment_comment(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    config: Config,
+    sheets: GoogleSheetsExporter,
+    bot: Bot,
+) -> None:
+    user = message.from_user
+    if not user:
+        return
+
+    # Verify still admin
+    if not await db.is_admin(user.id, config.admin_ids):
+        await state.clear()
+        await message.answer("⛔ Недостаточно прав.")
+        return
+
+    comment = (message.text or "").strip()
+    if not comment:
+        await message.answer(
+            "⚠️ Комментарий не может быть пустым. Введите причину или /cancel для отмены."
+        )
+        return
+
+    data = await state.get_data()
+    designer_id: int = data["unpaid_designer_id"]
+    report_date: str = data["unpaid_report_date"]
+    total_usdt: float = data.get("unpaid_total_usdt", 0.0)
+
+    await state.clear()
+
+    # Update DB with unpaid + comment
+    await db.update_payment_status(designer_id, report_date, "unpaid", user.id, comment)
+
+    await message.answer(
+        f"⏳ Статус «Не оплачено» сохранён.\n\n"
+        f"Дата: <b>{html.escape(report_date)}</b>\n"
+        f"Причина: <i>{html.escape(comment)}</i>"
+    )
+
+    # Notify the designer
+    try:
+        await bot.send_message(
+            designer_id,
+            f"⏳ <b>Отчёт пока не оплачен</b>\n\n"
+            f"📅 Дата: <b>{html.escape(report_date)}</b>\n"
+            f"💰 Сумма: <b>{total_usdt:.2f} USDT</b>\n"
+            f"💬 Причина: <i>{html.escape(comment)}</i>\n\n"
+            f"По вопросам обращайтесь к администратору.",
+        )
+    except Exception as exc:
+        logger.warning("Could not notify designer %s about unpaid: %s", designer_id, exc)
+
+    # Sync to Google Sheets
+    if sheets.is_enabled:
+        designer = await db.get_designer(designer_id)
+        if designer:
+            try:
+                await sheets.update_payment_status(
+                    designer.d7_nick, report_date, "unpaid", "", str(user.id), comment
+                )
+            except Exception as exc:
+                logger.error("Sheets unpaid update failed: %s", exc)
+
+    logger.info(
+        "Payment UNPAID: designer=%s date=%s by admin=%s comment=%r",
+        designer_id, report_date, user.id, comment,
     )

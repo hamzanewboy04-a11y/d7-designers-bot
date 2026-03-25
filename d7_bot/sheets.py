@@ -61,7 +61,7 @@ class GoogleSheetsExporter:
             sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
             ws = self._get_or_create_worksheet(sh, "designers", rows=500, cols=8)
             rows = [
-                ["telegram_id", "username", "d7_nick", "formats", "wallet", "updated_at"]
+                ["telegram_id", "username", "d7_nick", "role", "wallet", "updated_at"]
             ]
             now_iso = datetime.now(tz=timezone.utc).isoformat()
             for d in designers:
@@ -70,7 +70,7 @@ class GoogleSheetsExporter:
                         d.telegram_id,
                         d.username or "",
                         d.d7_nick,
-                        ", ".join(d.formats),
+                        d.role or "",
                         d.wallet,
                         now_iso,
                     ]
@@ -104,6 +104,7 @@ class GoogleSheetsExporter:
                     [
                         "created_at", "report_date", "designer", "task_code",
                         "cost_usdt", "wallet", "payment_status", "paid_at", "paid_by",
+                        "payment_comment",
                     ]
                 )
 
@@ -119,7 +120,7 @@ class GoogleSheetsExporter:
                 ws.append_row(
                     [
                         now_iso, report_date, designer.d7_nick, task_code,
-                        cost, designer.wallet, "pending", "", "",
+                        cost, designer.wallet, "pending", "", "", "",
                     ]
                 )
 
@@ -135,8 +136,9 @@ class GoogleSheetsExporter:
         status: str,
         paid_at: str,
         paid_by: str,
+        payment_comment: str = "",
     ) -> None:
-        """Update payment_status, paid_at, paid_by for matching rows in 'reports' sheet."""
+        """Update payment_status, paid_at, paid_by, payment_comment for matching rows in 'reports' sheet."""
         client = self._get_client()
         if not client:
             return
@@ -160,14 +162,20 @@ class GoogleSheetsExporter:
                 # Header not set up correctly, skip
                 return
 
+            # payment_comment column may not exist in old sheets — handle gracefully
+            col_comment: int | None = None
+            if "payment_comment" in header:
+                col_comment = header.index("payment_comment")
+
             updates = []
             for i, row in enumerate(all_values[1:], start=2):
-                # row index in sheet is i (1-based, +1 for header)
                 if len(row) > max(col_designer, col_date):
                     if row[col_designer] == designer_nick and row[col_date] == report_date:
                         updates.append((i, col_status + 1, status))
                         updates.append((i, col_paid_at + 1, paid_at))
                         updates.append((i, col_paid_by + 1, paid_by))
+                        if col_comment is not None:
+                            updates.append((i, col_comment + 1, payment_comment))
 
             for row_i, col_i, val in updates:
                 ws.update_cell(row_i, col_i, val)
