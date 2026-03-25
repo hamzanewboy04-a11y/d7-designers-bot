@@ -88,6 +88,14 @@ python main.py
 Если в логах Railway видно `ValueError: BOT_TOKEN is required`, это означает, что переменная токена не задана или задана с другим именем.
 Если видно ошибку `failed to stat ... /secrets/ADMIN_IDS`, значит задана ссылка на несуществующий Secret `ADMIN_IDS`.
 
+### Быстрое исправление ошибки `/secrets/ADMIN_IDS`
+1. Railway → Service → Variables.
+2. Найдите `ADMIN_IDS`.
+3. Удалите шаблон `secrets.ADMIN_IDS` и укажите значение напрямую (`111,222`) **или** удалите `ADMIN_IDS` полностью.
+4. Нажмите **Redeploy**.
+
+Минимально для старта нужны только: `BOT_TOKEN` (или `TELEGRAM_BOT_TOKEN`).
+
 ## Команды
 - `/start`
 - `/register`
