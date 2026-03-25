@@ -57,6 +57,7 @@ pip install -r requirements.txt
 2. Создать `.env`:
 ```env
 BOT_TOKEN=...
+# альтернативно можно TELEGRAM_BOT_TOKEN=...
 DB_PATH=d7_bot.sqlite3
 ADMIN_IDS=111111111,222222222
 REPORT_HOUR_UTC=8
@@ -70,6 +71,30 @@ GOOGLE_SERVICE_ACCOUNT_JSON={...json...}
 ```bash
 python main.py
 ```
+
+
+## Деплой на Railway
+
+1. Подключите репозиторий в Railway: **New Project → Deploy from GitHub Repo**.
+2. Укажите стартовую команду: `python main.py` (если Railway не определил автоматически).
+3. В разделе **Variables** добавьте переменные:
+   - обязательная: `BOT_TOKEN` (или `TELEGRAM_BOT_TOKEN`);
+   - рекомендуемые: `REPORT_HOUR_UTC` (например, `8`), `DB_PATH` (например, `d7_bot.sqlite3`);
+   - опционально: `ADMIN_IDS` (через запятую, например `111,222`) и переменные Google Sheets.
+4. Если используете шаблон `secrets.XYZ`, сначала создайте такой Secret в Railway.
+   Иначе указывайте значение напрямую (например, `ADMIN_IDS=111,222`).
+5. Перезапустите деплой после сохранения переменных.
+
+Если в логах Railway видно `ValueError: BOT_TOKEN is required`, это означает, что переменная токена не задана или задана с другим именем.
+Если видно ошибку `failed to stat ... /secrets/ADMIN_IDS`, значит задана ссылка на несуществующий Secret `ADMIN_IDS`.
+
+### Быстрое исправление ошибки `/secrets/ADMIN_IDS`
+1. Railway → Service → Variables.
+2. Найдите `ADMIN_IDS`.
+3. Удалите шаблон `secrets.ADMIN_IDS` и укажите значение напрямую (`111,222`) **или** удалите `ADMIN_IDS` полностью.
+4. Нажмите **Redeploy**.
+
+Минимально для старта нужны только: `BOT_TOKEN` (или `TELEGRAM_BOT_TOKEN`).
 
 ## Команды
 - `/start`
