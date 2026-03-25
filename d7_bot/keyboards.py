@@ -27,16 +27,26 @@ BTN_PROFILE = "👤 Мой профиль"
 BTN_TASKS = "📋 Мои задачи"
 BTN_EDIT = "✏️ Редактировать профиль"
 
+BTN_ADMIN_DESIGNERS = "👥 Дизайнеры"
+BTN_ADMIN_REPORT = "📊 Отчёт за день"
+
 MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT}
+ADMIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_ADMIN_DESIGNERS, BTN_ADMIN_REPORT}
 
 
-def main_menu_keyboard() -> ReplyKeyboardMarkup:
+def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     """Persistent reply keyboard shown at the bottom of the chat."""
+    keyboard = [
+        [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
+        [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_EDIT)],
+    ]
+    if is_admin:
+        keyboard.append([
+            KeyboardButton(text=BTN_ADMIN_DESIGNERS),
+            KeyboardButton(text=BTN_ADMIN_REPORT),
+        ])
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_EDIT)],
-        ],
+        keyboard=keyboard,
         resize_keyboard=True,
         persistent=True,
     )
