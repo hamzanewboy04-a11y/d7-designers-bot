@@ -603,10 +603,10 @@ class Database:
                 SELECT r.designer_id, d.d7_nick, r.report_date,
                        COUNT(*) AS task_count, COALESCE(SUM(r.cost_usdt), 0.0) AS total_usdt
                 FROM reports r
-                JOIN designers d ON d.telegram_id = r.designer_id
+                JOIN designers d ON d.telegram_id = COALESCE(r.subject_user_id, r.designer_id)
                 WHERE r.payment_status = 'paid'
                   AND DATE(r.paid_at, '+3 hours') >= ?
-                GROUP BY r.designer_id, r.report_date
+                GROUP BY COALESCE(r.subject_user_id, r.designer_id), r.report_date
                 ORDER BY r.report_date DESC, d.d7_nick
                 """,
                 (since_date.isoformat(),),
