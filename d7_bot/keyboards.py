@@ -104,6 +104,9 @@ def admin_employees_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="⭐ Отзовики", callback_data="admin:emp:reviewer"),
             ],
             [
+                InlineKeyboardButton(text="🗂 Проджекты", callback_data="admin:emp:project_manager"),
+            ],
+            [
                 InlineKeyboardButton(text="🏆 Рейтинг 7 дней", callback_data="admin:emp:rank7"),
                 InlineKeyboardButton(text="🏆 Рейтинг 30 дней", callback_data="admin:emp:rank30"),
             ],

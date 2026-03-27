@@ -93,7 +93,7 @@ async def cmd_addadmin(message: Message, db: Database, config: Config) -> None:
 # ── /listdesigners ─────────────────────────────────────────────────────────
 
 # Valid role identifiers
-_VALID_ROLES = {"designer", "smm", "reviewer"}
+_VALID_ROLES = {"designer", "smm", "reviewer", "project_manager"}
 
 
 @router.message(Command("listdesigners"))
@@ -110,7 +110,7 @@ async def cmd_listdesigners(message: Message, db: Database, config: Config) -> N
         else:
             await message.answer(
                 f"❌ Неизвестная роль: <code>{html.escape(raw_role)}</code>\n\n"
-                "Доступные: <code>designer</code>, <code>smm</code>, <code>reviewer</code>"
+                "Доступные: <code>designer</code>, <code>smm</code>, <code>reviewer</code>, <code>project_manager</code>"
             )
             return
 
@@ -530,6 +530,7 @@ async def cmd_dashboard(message: Message, db: Database, config: Config) -> None:
     designer_count = role_counts.get("designer", 0)
     smm_count = role_counts.get("smm", 0)
     reviewer_count = role_counts.get("reviewer", 0)
+    project_manager_count = role_counts.get("project_manager", 0)
 
     # Pending payments
     pending = await db.get_pending_payments_summary()
@@ -563,6 +564,7 @@ async def cmd_dashboard(message: Message, db: Database, config: Config) -> None:
         f"  🎨 Дизайнеров: {designer_count}",
         f"  📱 SMM: {smm_count}",
         f"  ⭐ Отзовиков: {reviewer_count}",
+        f"  🗂 Проджектов: {project_manager_count}",
         "",
         "━━━━━━━━━━━━━━━━━━━━",
         "💸 <b>Оплаты</b>",
@@ -844,7 +846,7 @@ async def cb_admin_hub(
         await _hub_edit_or_send(callback, text, admin_employees_keyboard())
         return
 
-    if action in ("emp:designer", "emp:smm", "emp:reviewer"):
+    if action in ("emp:designer", "emp:smm", "emp:reviewer", "emp:project_manager"):
         role = action.split(":")[1]
         text = await _build_employees_text(db, role)
         await _hub_edit_or_send(callback, text, admin_employees_keyboard())
@@ -982,6 +984,7 @@ async def _build_dashboard_text(db: Database) -> str:
     designer_count = role_counts.get("designer", 0)
     smm_count = role_counts.get("smm", 0)
     reviewer_count = role_counts.get("reviewer", 0)
+    project_manager_count = role_counts.get("project_manager", 0)
 
     pending = await db.get_pending_payments_summary()
 
