@@ -895,8 +895,7 @@ class Database:
             return result
 
 
-# ── helpers ────────────────────────────────────────────────────────────────
-
+    # ── role-specific report entries ───────────────────────────────────────
 
     async def add_reviewer_entry(self, entry: ReviewerEntry) -> bool:
         task_code = f"reviews:{entry.review_geo}:{entry.review_count}"
@@ -932,15 +931,6 @@ class Database:
             await db.commit()
             return True
 
-
-    async def list_designers_by_role(self, role: str) -> list[Designer]:
-        async with aiosqlite.connect(self.path) as db:
-            cursor = await db.execute(
-                "SELECT telegram_id, username, d7_nick, role, wallet FROM designers WHERE role = ? ORDER BY d7_nick COLLATE NOCASE",
-                (role,),
-            )
-            rows = await cursor.fetchall()
-            return [_row_to_designer(row) for row in rows]
 
     async def add_smm_daily_entry(self, entry: SmmDailyEntry) -> bool:
         task_code = "smm_daily_fixed"
