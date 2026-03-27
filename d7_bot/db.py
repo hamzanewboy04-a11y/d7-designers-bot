@@ -1044,6 +1044,72 @@ class Database:
                 'item_count': int(row[6]),
             }
 
+    async def list_pending_review_entries(self, limit: int = 20) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT re.id, re.employee_id, e.display_name, re.report_date,
+                       COALESCE(SUM(ri.total_usdt), 0.0) AS total_usdt,
+                       COUNT(ri.id) AS item_count
+                FROM review_entries re
+                JOIN employees e ON e.id = re.employee_id
+                LEFT JOIN review_entry_items ri ON ri.review_entry_id = re.id
+                WHERE re.status = 'submitted'
+                GROUP BY re.id, re.employee_id, e.display_name, re.report_date
+                ORDER BY re.created_at ASC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'review_entry_id': int(row[0]),
+                    'employee_id': int(row[1]),
+                    'display_name': row[2],
+                    'report_date': row[3],
+                    'total_usdt': float(row[4]),
+                    'item_count': int(row[5]),
+                }
+                for row in rows
+            ]
+
+    async def verify_review_entry(self, review_entry_id: int, pm_employee_id: int) -> dict | None:
+        async with aiosqlite.connect(self.path) as db:
+            summary = await self.get_review_entry_summary(review_entry_id)
+            if not summary or summary['status'] != 'submitted':
+                return None
+            await db.execute(
+                """
+                UPDATE review_entries
+                SET status = 'verified', verified_by_pm = ?, verified_at = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (pm_employee_id, utc_now_iso(), review_entry_id),
+            )
+            await db.commit()
+            summary['status'] = 'verified'
+            return summary
+
+    async def reject_review_entry(self, review_entry_id: int, pm_employee_id: int, comment: str = '') -> dict | None:
+        async with aiosqlite.connect(self.path) as db:
+            summary = await self.get_review_entry_summary(review_entry_id)
+            if not summary or summary['status'] != 'submitted':
+                return None
+            await db.execute(
+                """
+                UPDATE review_entries
+                SET status = 'rejected', verified_by_pm = ?, verified_at = ?,
+                    comment = CASE WHEN ? = '' THEN comment ELSE ? END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (pm_employee_id, utc_now_iso(), comment, comment, review_entry_id),
+            )
+            await db.commit()
+            summary['status'] = 'rejected'
+            return summary
+
     # ── Designers ──────────────────────────────────────────────────────────
 
     async def upsert_designer(self, designer: Designer) -> None:

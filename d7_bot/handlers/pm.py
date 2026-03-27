@@ -44,6 +44,91 @@ async def _check_pm(message: Message, db: Database, config: Config) -> Employee 
     return employee
 
 
+@router.message(Command("pm_review_queue"))
+async def cmd_pm_review_queue(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    rows = await db.list_pending_review_entries(limit=20)
+    if not rows:
+        await message.answer("ℹ️ Pending reviewer v2 entries нет.")
+        return
+
+    lines = ["🧾 <b>Pending reviewer v2 entries</b>", ""]
+    for item in rows:
+        lines.append(
+            f"• entry <code>{item['review_entry_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
+            f"  date {html.escape(item['report_date'])} | {item['item_count']} lines | <b>{item['total_usdt']:.2f} USDT</b>"
+        )
+    lines.append(
+        "\nКоманды:\n"
+        "<code>/pm_review_verify &lt;entry_id&gt;</code>\n"
+        "<code>/pm_review_reject &lt;entry_id&gt; [comment]</code>"
+    )
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("pm_review_verify"))
+async def cmd_pm_review_verify(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    args = (message.text or '').split(maxsplit=1)
+    if len(args) < 2 or not args[1].strip().isdigit():
+        await message.answer(
+            "Использование: <code>/pm_review_verify &lt;entry_id&gt;</code>\n"
+            "Пример: <code>/pm_review_verify 5</code>"
+        )
+        return
+
+    result = await db.verify_review_entry(int(args[1].strip()), pm.id)
+    if not result:
+        await message.answer("❌ Reviewer entry не найден или уже обработан.")
+        return
+
+    await message.answer(
+        "✅ <b>Reviewer entry verified</b>\n\n"
+        f"Entry: <code>{result['review_entry_id']}</code>\n"
+        f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
+        f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
+        f"Строк: <b>{result['item_count']}</b>\n"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+    )
+
+
+@router.message(Command("pm_review_reject"))
+async def cmd_pm_review_reject(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    parts = (message.text or '').split(maxsplit=2)
+    if len(parts) < 2 or not parts[1].strip().isdigit():
+        await message.answer(
+            "Использование: <code>/pm_review_reject &lt;entry_id&gt; [comment]</code>\n"
+            "Пример: <code>/pm_review_reject 5 price mismatch</code>"
+        )
+        return
+
+    entry_id = int(parts[1].strip())
+    comment = parts[2].strip() if len(parts) > 2 else ''
+    result = await db.reject_review_entry(entry_id, pm.id, comment)
+    if not result:
+        await message.answer("❌ Reviewer entry не найден или уже обработан.")
+        return
+
+    await message.answer(
+        "🚫 <b>Reviewer entry rejected</b>\n\n"
+        f"Entry: <code>{result['review_entry_id']}</code>\n"
+        f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
+        f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+        + (f"\nКомментарий: <i>{html.escape(comment)}</i>" if comment else "")
+    )
+
+
 @router.message(Command("pm_smm_assign"))
 async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> None:
     pm = await _check_pm(message, db, config)
