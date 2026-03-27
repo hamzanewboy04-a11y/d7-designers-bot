@@ -78,7 +78,9 @@ V-1001 5.00
 - `/pm_smm_assignments` — посмотреть активные assignment'ы;
 - `/pm_smm_report` — внести daily entry за SMM через пошаговый flow;
 - `/pm_smm_weekly` — weekly payroll preview по всем SMM за прошлую неделю;
-- `/pm_smm_weekly_employee <employee_id>` — детализация по одному SMM за прошлую неделю.
+- `/pm_smm_weekly_employee <employee_id>` — детализация по одному SMM за прошлую неделю;
+- `/pm_smm_batch_create` — создать weekly payout batch'и по прошлой неделе;
+- `/pm_smm_batches` — посмотреть pending SMM weekly batch'и.
 
 > Это переходный skeleton под новую бизнес-логику. Текущий designer flow продолжает работать отдельно.
 

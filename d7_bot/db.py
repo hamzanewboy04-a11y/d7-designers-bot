@@ -779,6 +779,112 @@ class Database:
                 for row in rows
             ]
 
+    async def create_smm_weekly_batches(self, period_start: str, period_end: str) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT e.id, e.display_name,
+                       COALESCE(SUM(s.total_usdt), 0.0) AS total_usdt
+                FROM smm_daily_entries s
+                JOIN employees e ON e.id = s.smm_employee_id
+                WHERE s.report_date >= ? AND s.report_date <= ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM payment_batch_items pbi
+                      JOIN payment_batches pb ON pb.id = pbi.batch_id
+                      WHERE pbi.source_table = 'smm_daily_entries'
+                        AND pbi.source_entry_id = s.id
+                        AND pb.status IN ('pending', 'paid')
+                  )
+                GROUP BY e.id, e.display_name
+                HAVING total_usdt > 0
+                ORDER BY e.display_name COLLATE NOCASE
+                """,
+                (period_start, period_end),
+            )
+            employees = await cursor.fetchall()
+
+            created: list[dict] = []
+            for employee_id, display_name, total_usdt in employees:
+                batch_cursor = await db.execute(
+                    """
+                    INSERT INTO payment_batches
+                        (employee_id, payout_mode, source_type, period_start, period_end, total_usdt, status)
+                    VALUES (?, 'weekly', 'smm', ?, ?, ?, 'pending')
+                    """,
+                    (employee_id, period_start, period_end, float(total_usdt)),
+                )
+                batch_id = int(batch_cursor.lastrowid)
+
+                item_cursor = await db.execute(
+                    """
+                    SELECT id, total_usdt
+                    FROM smm_daily_entries s
+                    WHERE s.smm_employee_id = ?
+                      AND s.report_date >= ? AND s.report_date <= ?
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM payment_batch_items pbi
+                          JOIN payment_batches pb ON pb.id = pbi.batch_id
+                          WHERE pbi.source_table = 'smm_daily_entries'
+                            AND pbi.source_entry_id = s.id
+                            AND pb.id != ?
+                            AND pb.status IN ('pending', 'paid')
+                      )
+                    """,
+                    (employee_id, period_start, period_end, batch_id),
+                )
+                items = await item_cursor.fetchall()
+                for entry_id, amount_usdt in items:
+                    await db.execute(
+                        """
+                        INSERT INTO payment_batch_items
+                            (batch_id, source_table, source_entry_id, amount_usdt)
+                        VALUES (?, 'smm_daily_entries', ?, ?)
+                        """,
+                        (batch_id, entry_id, float(amount_usdt or 0)),
+                    )
+
+                created.append(
+                    {
+                        'batch_id': batch_id,
+                        'employee_id': int(employee_id),
+                        'display_name': display_name,
+                        'total_usdt': float(total_usdt),
+                    }
+                )
+
+            await db.commit()
+            return created
+
+    async def list_pending_smm_batches(self) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end,
+                       pb.total_usdt, COUNT(pbi.id) AS item_count
+                FROM payment_batches pb
+                JOIN employees e ON e.id = pb.employee_id
+                LEFT JOIN payment_batch_items pbi ON pbi.batch_id = pb.id
+                WHERE pb.source_type = 'smm' AND pb.payout_mode = 'weekly' AND pb.status = 'pending'
+                GROUP BY pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end, pb.total_usdt
+                ORDER BY pb.created_at DESC, e.display_name COLLATE NOCASE
+                """
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'batch_id': int(row[0]),
+                    'employee_id': int(row[1]),
+                    'display_name': row[2],
+                    'period_start': row[3],
+                    'period_end': row[4],
+                    'total_usdt': float(row[5]),
+                    'item_count': int(row[6]),
+                }
+                for row in rows
+            ]
+
     # ── Designers ──────────────────────────────────────────────────────────
 
     async def upsert_designer(self, designer: Designer) -> None:

@@ -200,6 +200,57 @@ async def cmd_pm_smm_weekly_employee(message: Message, db: Database, config: Con
     await message.answer("\n".join(lines))
 
 
+@router.message(Command("pm_smm_batch_create"))
+async def cmd_pm_smm_batch_create(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    period_start, period_end = _last_week_range()
+    created = await db.create_smm_weekly_batches(period_start, period_end)
+    if not created:
+        await message.answer(
+            f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> нет новых SMM записей для batch creation."
+        )
+        return
+
+    grand_total = sum(item['total_usdt'] for item in created)
+    lines = [
+        "🧾 <b>SMM weekly payout batches created</b>",
+        f"📅 Период: <code>{period_start}</code> — <code>{period_end}</code>",
+        f"💰 Итого: <b>{grand_total:.2f} USDT</b>",
+        "",
+    ]
+    for item in created:
+        lines.append(
+            f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>"
+            f" — {item['total_usdt']:.2f} USDT"
+        )
+    lines.append("\nПосмотреть pending batch'и: <code>/pm_smm_batches</code>")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("pm_smm_batches"))
+async def cmd_pm_smm_batches(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    rows = await db.list_pending_smm_batches()
+    if not rows:
+        await message.answer("ℹ️ Pending SMM weekly batch'ей пока нет.")
+        return
+
+    lines = ["📦 <b>Pending SMM weekly batches</b>", ""]
+    for item in rows:
+        lines.append(
+            f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
+            f"  employee ID <code>{item['employee_id']}</code> | {html.escape(item['period_start'])} — {html.escape(item['period_end'])}\n"
+            f"  {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>"
+        )
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("pm_smm_report"))
 async def cmd_pm_smm_report(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     pm = await _check_pm(message, db, config)
