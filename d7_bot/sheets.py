@@ -14,6 +14,7 @@ from d7_bot.db import Designer
 
 if TYPE_CHECKING:
     from d7_bot.handlers.report import ParsedTask
+    from d7_bot.db import ReviewerEntry
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,69 @@ class GoogleSheetsExporter:
             await self._run(_append)
         except Exception as exc:
             logger.error("GoogleSheets append_report_rows failed: %s", exc)
+
+    async def append_reviewer_row(
+        self,
+        designer: Designer,
+        report_date: str,
+        review_geo: str,
+        review_count: int,
+        unit_price: float,
+        total_usdt: float,
+        comment: str = "",
+    ) -> None:
+        client = self._get_client()
+        if not client:
+            return
+
+        now_iso = datetime.now(tz=timezone.utc).isoformat()
+        _CANONICAL_HEADER = [
+            "created_at", "report_date", "designer", "entry_type", "task_code",
+            "cost_usdt", "wallet", "payment_status", "paid_at", "paid_by",
+            "payment_comment", "task_prefix", "task_group", "task_geo",
+            "review_geo", "review_count", "unit_price", "comment",
+        ]
+
+        def _append() -> None:
+            sh = client.open_by_key(self.sheet_id)  # type: ignore[arg-type]
+            ws = self._get_or_create_worksheet(sh, "reports", rows=5000, cols=len(_CANONICAL_HEADER))
+            header_cell = ws.acell("A1").value
+            if not header_cell:
+                ws.update("A1", [_CANONICAL_HEADER])
+                header = _CANONICAL_HEADER[:]
+            else:
+                header = ws.row_values(1)
+            col_idx: dict[str, int] = {name: i for i, name in enumerate(header)}
+            data_map = {
+                "created_at": now_iso,
+                "report_date": report_date,
+                "designer": designer.d7_nick,
+                "entry_type": "reviewer_piecework",
+                "task_code": f"reviews:{review_geo}:{review_count}",
+                "cost_usdt": total_usdt,
+                "wallet": designer.wallet,
+                "payment_status": "pending",
+                "paid_at": "",
+                "paid_by": "",
+                "payment_comment": "",
+                "task_prefix": "",
+                "task_group": "",
+                "task_geo": "",
+                "review_geo": review_geo,
+                "review_count": review_count,
+                "unit_price": unit_price,
+                "comment": comment,
+            }
+            row = [""] * len(header)
+            for col_name, value in data_map.items():
+                if col_name in col_idx:
+                    row[col_idx[col_name]] = value
+            ws.append_row(row, value_input_option="USER_ENTERED")
+
+        try:
+            await self._run(_append)
+        except Exception as exc:
+            logger.error("GoogleSheets append_reviewer_row failed: %s", exc)
 
     async def update_payment_status(
         self,

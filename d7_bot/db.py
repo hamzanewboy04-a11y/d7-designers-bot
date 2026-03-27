@@ -885,18 +885,16 @@ class Database:
 # ── helpers ────────────────────────────────────────────────────────────────
 
 
-def _row_to_designer(row: tuple) -> Designer:
-    return Designer(
-        telegram_id=row[0],
-        username=row[1],
-        d7_nick=row[2],
-        role=row[3] or "",
-        wallet=row[4],
-    )
-
-
-    async def add_reviewer_entry(self, entry: ReviewerEntry) -> None:
+    async def add_reviewer_entry(self, entry: ReviewerEntry) -> bool:
+        task_code = f"reviews:{entry.review_geo}:{entry.review_count}"
         async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT 1 FROM reports WHERE designer_id = ? AND report_date = ? AND task_code = ? LIMIT 1",
+                (entry.subject_user_id, entry.report_date, task_code),
+            )
+            exists = await cursor.fetchone()
+            if exists:
+                return False
             await db.execute(
                 """
                 INSERT INTO reports
@@ -910,7 +908,7 @@ def _row_to_designer(row: tuple) -> Designer:
                     entry.subject_user_id,
                     entry.entered_by_user_id,
                     entry.report_date,
-                    f"reviews:{entry.review_geo}:{entry.review_count}",
+                    task_code,
                     entry.cost_usdt,
                     entry.comment,
                     entry.review_geo,
@@ -919,3 +917,14 @@ def _row_to_designer(row: tuple) -> Designer:
                 ),
             )
             await db.commit()
+            return True
+
+
+def _row_to_designer(row: tuple) -> Designer:
+    return Designer(
+        telegram_id=row[0],
+        username=row[1],
+        d7_nick=row[2],
+        role=row[3] or "",
+        wallet=row[4],
+    )

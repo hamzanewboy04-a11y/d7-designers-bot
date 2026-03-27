@@ -159,7 +159,7 @@ _TASK_FORMAT_HINT = (
 
 
 @router.callback_query(ReportStates.choose_date, F.data == "report_date:yesterday")
-async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext) -> None:
+async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     await state.update_data(report_date=yesterday)
     await callback.answer()
@@ -177,7 +177,7 @@ async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(ReportStates.choose_date, F.data == "report_date:today")
-async def cb_date_today(callback: CallbackQuery, state: FSMContext) -> None:
+async def cb_date_today(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
     today = date.today().isoformat()
     await state.update_data(report_date=today)
     await callback.answer()
@@ -207,7 +207,7 @@ async def cb_date_custom(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(ReportStates.custom_date)
-async def step_custom_date(message: Message, state: FSMContext) -> None:
+async def step_custom_date(message: Message, state: FSMContext, db: Database) -> None:
     raw = (message.text or "").strip()
     try:
         parsed = date.fromisoformat(raw)
@@ -405,7 +405,7 @@ async def reviewer_count_step(message: Message, state: FSMContext) -> None:
 
 
 @router.message(ReportStates.reviewer_unit_price)
-async def reviewer_unit_price_step(message: Message, state: FSMContext, db: Database) -> None:
+async def reviewer_unit_price_step(message: Message, state: FSMContext) -> None:
     raw = (message.text or '').strip().replace(',', '.')
     try:
         unit_price = float(raw)
@@ -435,8 +435,19 @@ async def reviewer_unit_price_step(message: Message, state: FSMContext, db: Data
 
 
 @router.message(ReportStates.reviewer_confirm)
-async def reviewer_confirm_step(message: Message, state: FSMContext, db: Database) -> None:
+async def reviewer_confirm_step(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    sheets: GoogleSheetsExporter,
+    bot: Bot,
+    config: Config,
+) -> None:
     text = (message.text or '').strip().lower()
+    if text in {'нет', 'no', 'n'}:
+        await state.clear()
+        await message.answer('Ок, отчёт не сохранён.', reply_markup=main_menu_keyboard())
+        return
     if text not in {'да', 'yes', 'y'}:
         await message.answer('Отправь <code>да</code>, чтобы сохранить отчёт, или <code>/cancel</code>, чтобы отменить.')
         return
@@ -458,11 +469,49 @@ async def reviewer_confirm_step(message: Message, state: FSMContext, db: Databas
         review_geo=data['review_geo'],
         review_count=int(data['review_count']),
         unit_price=float(data['unit_price']),
+        comment=(data.get('comment') or ''),
     )
-    await db.add_reviewer_entry(entry)
+    added = await db.add_reviewer_entry(entry)
+    if not added:
+        await state.clear()
+        await message.answer('⚠️ Такой отчёт уже существует за эту дату. Проверь дубликаты.', reply_markup=main_menu_keyboard())
+        return
+
     await state.clear()
     await message.answer(
-        f'✅ Отчёт по отзывам сохранён.\n\nГео: {entry.review_geo}\nКоличество: {entry.review_count}\nИтого: {entry.cost_usdt:.2f} USDT',
+        f'✅ Отчёт по отзывам сохранён.\n\nГео: {entry.review_geo}\nКоличество: {entry.review_count}\nЦена за 1 отзыв: {entry.unit_price:.2f} USDT\nИтого: {entry.cost_usdt:.2f} USDT',
         reply_markup=main_menu_keyboard(),
     )
+
+    if sheets.is_enabled:
+        try:
+            await sheets.append_reviewer_row(
+                designer,
+                entry.report_date,
+                entry.review_geo,
+                entry.review_count,
+                entry.unit_price,
+                entry.cost_usdt,
+                entry.comment,
+            )
+        except Exception as exc:
+            logger.error('Sheets export failed for reviewer entry: %s', exc)
+
+    admin_ids = set(config.admin_ids) | set(await db.list_admins())
+    notify_text = (
+        f"📬 <b>Новый отчёт от {html.escape(designer.d7_nick)}</b>\n"
+        f"📅 Дата: {html.escape(entry.report_date)}\n"
+        f"💳 Кошелёк: <code>{html.escape(designer.wallet)}</code>\n\n"
+        f"📝 <b>Отзовики</b>\n"
+        f"• Гео: {html.escape(entry.review_geo)}\n"
+        f"• Количество отзывов: {entry.review_count}\n"
+        f"• Цена за 1 отзыв: {entry.unit_price:.2f} USDT\n"
+        f"💰 Сумма: <b>{entry.cost_usdt:.2f} USDT</b>\n\n"
+        f"Отметьте статус оплаты:"
+    )
+    for admin_id in admin_ids:
+        try:
+            await bot.send_message(admin_id, notify_text, reply_markup=payment_keyboard(user.id, entry.report_date))
+        except Exception as exc:
+            logger.warning('Could not notify admin %s about reviewer report: %s', admin_id, exc)
 
