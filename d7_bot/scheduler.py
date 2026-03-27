@@ -60,35 +60,14 @@ async def daily_admin_summary(
         except Exception as exc:
             logger.warning("Could not send daily report to admin %s: %s", admin_id, exc)
 
-    # Sync to Google Sheets
+    # Sync designers snapshot to Google Sheets.
+    # Report rows are exported at report submission time; do not re-append them here.
     if sheets.is_enabled:
         designers = await db.list_designers()
         try:
             await sheets.sync_designers(designers)
         except Exception as exc:
             logger.error("Sheets sync_designers failed in scheduler: %s", exc)
-
-        if rows:
-            from collections import defaultdict
-            by_designer: dict[str, list[str]] = defaultdict(list)
-            wallet_map: dict[str, str] = {}
-            for d7_nick, wallet, task_code, cost_usdt, _ps in rows:
-                by_designer[d7_nick].append(f"{task_code} {cost_usdt:.2f}")
-                wallet_map[d7_nick] = wallet
-
-            for nick, task_lines in by_designer.items():
-                from d7_bot.db import Designer as Des
-                fake_designer = Des(
-                    telegram_id=0,
-                    username=None,
-                    d7_nick=nick,
-                    role="",
-                    wallet=wallet_map[nick],
-                )
-                try:
-                    await sheets.append_report_rows(fake_designer, yesterday.isoformat(), task_lines)
-                except Exception as exc:
-                    logger.error("Sheets append_report_rows failed for %s: %s", nick, exc)
 
 
 # ── 08:00 MSK: morning reminder to all employees ──────────────────────────

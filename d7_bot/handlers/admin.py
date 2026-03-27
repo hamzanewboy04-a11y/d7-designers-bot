@@ -25,6 +25,7 @@ from d7_bot.keyboards import (
     payment_keyboard,
 )
 from d7_bot.sheets import GoogleSheetsExporter
+from d7_bot.db import moscow_today
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin")
@@ -169,7 +170,7 @@ async def cmd_adminreport(message: Message, db: Database, config: Config) -> Non
 
     args = (message.text or "").split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
-        report_date = date.today() - timedelta(days=1)
+        report_date = moscow_today() - timedelta(days=1)
     else:
         date_str = args[1].strip()
         try:
@@ -458,7 +459,7 @@ async def _send_analytics(message: Message, db: Database, start_date: str, end_d
 async def cmd_analyticsday(message: Message, db: Database, config: Config) -> None:
     if not await _check_admin(message, db, config):
         return
-    today = date.today().isoformat()
+    today = moscow_today().isoformat()
     await _send_analytics(message, db, today, today, "за сегодня")
 
 
@@ -466,7 +467,7 @@ async def cmd_analyticsday(message: Message, db: Database, config: Config) -> No
 async def cmd_analyticsweek(message: Message, db: Database, config: Config) -> None:
     if not await _check_admin(message, db, config):
         return
-    end = date.today()
+    end = moscow_today()
     start = end - timedelta(days=6)
     await _send_analytics(message, db, start.isoformat(), end.isoformat(), "за 7 дней")
 
@@ -475,7 +476,7 @@ async def cmd_analyticsweek(message: Message, db: Database, config: Config) -> N
 async def cmd_analyticsmonth(message: Message, db: Database, config: Config) -> None:
     if not await _check_admin(message, db, config):
         return
-    end = date.today()
+    end = moscow_today()
     start = end - timedelta(days=29)
     await _send_analytics(message, db, start.isoformat(), end.isoformat(), "за 30 дней")
 
@@ -890,41 +891,41 @@ async def cb_admin_hub(
 
     # ── Analytics sub-actions ─────────────────────────────────────────────
     if action == "an:today":
-        today = date.today().isoformat()
+        today = moscow_today().isoformat()
         text = await _build_analytics_text(db, today, today, "за сегодня")
         await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
         return
 
     if action == "an:7d":
-        end = date.today()
+        end = moscow_today()
         start = end - timedelta(days=6)
         text = await _build_analytics_text(db, start.isoformat(), end.isoformat(), "за 7 дней")
         await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
         return
 
     if action == "an:30d":
-        end = date.today()
+        end = moscow_today()
         start = end - timedelta(days=29)
         text = await _build_analytics_text(db, start.isoformat(), end.isoformat(), "за 30 дней")
         await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
         return
 
     if action == "an:geo7":
-        end = date.today()
+        end = moscow_today()
         start = end - timedelta(days=6)
         text = await _build_geo_ranking_text(db, start.isoformat(), end.isoformat())
         await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
         return
 
     if action == "an:roles7":
-        end = date.today()
+        end = moscow_today()
         start = end - timedelta(days=6)
         text = await _build_roles_text(db, start.isoformat(), end.isoformat())
         await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
         return
 
     if action == "an:cpd7":
-        end = date.today()
+        end = moscow_today()
         start = end - timedelta(days=6)
         text = await _build_cost_per_day_text(db, start.isoformat(), end.isoformat())
         await _hub_edit_or_send(callback, text, admin_analytics_keyboard())
@@ -932,13 +933,13 @@ async def cb_admin_hub(
 
     # ── Reports sub-actions ───────────────────────────────────────────────
     if action == "rep:missed":
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = moscow_today() - timedelta(days=1)
         text = await _get_missed_text(db, yesterday)
         await _hub_edit_or_send(callback, text, admin_reports_keyboard())
         return
 
     if action == "rep:day":
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = moscow_today() - timedelta(days=1)
         text = await _build_adminreport_text(db, yesterday)
         await _hub_edit_or_send(callback, text, admin_reports_keyboard())
         return
@@ -1011,6 +1012,7 @@ async def _build_dashboard_text(db: Database) -> str:
         f"  🎨 Дизайнеров: {designer_count}",
         f"  📱 SMM: {smm_count}",
         f"  ⭐ Отзовиков: {reviewer_count}",
+        f"  🗂 Проджектов: {project_manager_count}",
         "",
         "━━━━━━━━━━━━━━━━━━━━",
         "💸 <b>Оплаты</b>",

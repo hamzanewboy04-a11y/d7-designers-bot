@@ -132,7 +132,7 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
         )
         return
 
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    yesterday = (moscow_today() - timedelta(days=1)).isoformat()
     await state.set_state(ReportStates.choose_date)
     title = "📝 <b>Сдать отчёт по отзывам</b>" if designer.role == "reviewer" else "📝 <b>Сдать отчёт по задачам</b>"
     await message.answer(

@@ -558,15 +558,16 @@ class Database:
             return await cursor.fetchone() is not None
 
     async def list_missing_reports(self, report_date: date) -> list[Designer]:
-        """Return all designers who have NO report for the given date."""
+        """Return designers-only employees who have NO report for the given date."""
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
                 SELECT telegram_id, username, d7_nick, role, wallet
                 FROM designers
-                WHERE telegram_id NOT IN (
-                    SELECT DISTINCT designer_id FROM reports WHERE report_date = ?
-                )
+                WHERE role = 'designer'
+                  AND telegram_id NOT IN (
+                      SELECT DISTINCT designer_id FROM reports WHERE report_date = ?
+                  )
                 ORDER BY d7_nick
                 """,
                 (report_date.isoformat(),),
