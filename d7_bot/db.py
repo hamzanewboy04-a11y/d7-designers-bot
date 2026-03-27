@@ -70,6 +70,30 @@ class SmmDailyEntry:
         return float(self.fixed_day_amount)
 
 
+@dataclass
+class Employee:
+    id: int
+    telegram_id: int | None
+    username: str | None
+    display_name: str
+    role: str
+    wallet: str
+    is_active: bool
+
+
+@dataclass
+class SmmAssignment:
+    id: int
+    smm_employee_id: int
+    channel_name: str
+    geo: str
+    daily_rate_usdt: float
+    active_from: str | None
+    active_to: str | None
+    status: str
+    comment: str
+
+
 class Database:
     def __init__(self, path: str) -> None:
         self.path = path
@@ -550,6 +574,142 @@ class Database:
 
         # Run migration after table creation (in case of old schema)
         await self.migrate()
+
+    # ── Employees (next-gen domain model) ─────────────────────────────────
+
+    async def list_employees_by_role(self, role: str | None = None) -> list[Employee]:
+        async with aiosqlite.connect(self.path) as db:
+            if role:
+                cursor = await db.execute(
+                    """
+                    SELECT id, telegram_id, username, display_name, role, wallet, is_active
+                    FROM employees
+                    WHERE role = ? AND is_active = 1
+                    ORDER BY display_name COLLATE NOCASE
+                    """,
+                    (role,),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT id, telegram_id, username, display_name, role, wallet, is_active
+                    FROM employees
+                    WHERE is_active = 1
+                    ORDER BY display_name COLLATE NOCASE
+                    """
+                )
+            rows = await cursor.fetchall()
+            return [_row_to_employee(row) for row in rows]
+
+    async def get_employee_by_telegram_id(self, telegram_id: int) -> Employee | None:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT id, telegram_id, username, display_name, role, wallet, is_active
+                FROM employees
+                WHERE telegram_id = ?
+                LIMIT 1
+                """,
+                (telegram_id,),
+            )
+            row = await cursor.fetchone()
+            return _row_to_employee(row) if row else None
+
+    async def get_employee(self, employee_id: int) -> Employee | None:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT id, telegram_id, username, display_name, role, wallet, is_active
+                FROM employees
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (employee_id,),
+            )
+            row = await cursor.fetchone()
+            return _row_to_employee(row) if row else None
+
+    async def add_smm_assignment(
+        self,
+        smm_employee_id: int,
+        channel_name: str,
+        geo: str,
+        daily_rate_usdt: float,
+        active_from: str | None = None,
+        active_to: str | None = None,
+        comment: str = "",
+    ) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO smm_assignments
+                    (smm_employee_id, channel_name, geo, daily_rate_usdt, active_from, active_to, comment)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (smm_employee_id, channel_name, geo, daily_rate_usdt, active_from, active_to, comment),
+            )
+            await db.commit()
+            return int(cursor.lastrowid)
+
+    async def list_active_smm_assignments(self, smm_employee_id: int | None = None) -> list[SmmAssignment]:
+        async with aiosqlite.connect(self.path) as db:
+            if smm_employee_id is not None:
+                cursor = await db.execute(
+                    """
+                    SELECT id, smm_employee_id, channel_name, geo, daily_rate_usdt,
+                           active_from, active_to, status, comment
+                    FROM smm_assignments
+                    WHERE smm_employee_id = ? AND status = 'active'
+                    ORDER BY channel_name COLLATE NOCASE
+                    """,
+                    (smm_employee_id,),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT id, smm_employee_id, channel_name, geo, daily_rate_usdt,
+                           active_from, active_to, status, comment
+                    FROM smm_assignments
+                    WHERE status = 'active'
+                    ORDER BY smm_employee_id, channel_name COLLATE NOCASE
+                    """
+                )
+            rows = await cursor.fetchall()
+            return [_row_to_smm_assignment(row) for row in rows]
+
+    async def add_smm_daily_entry_v2(
+        self,
+        smm_employee_id: int,
+        entered_by_pm_id: int,
+        report_date: str,
+        assignment_id: int,
+        channel_name_snapshot: str,
+        geo_snapshot: str,
+        daily_rate_snapshot: float,
+        comment: str = "",
+    ) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO smm_daily_entries
+                    (smm_employee_id, entered_by_pm_id, report_date, assignment_id,
+                     channel_name_snapshot, geo_snapshot, daily_rate_snapshot, total_usdt, comment)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    smm_employee_id,
+                    entered_by_pm_id,
+                    report_date,
+                    assignment_id,
+                    channel_name_snapshot,
+                    geo_snapshot,
+                    daily_rate_snapshot,
+                    daily_rate_snapshot,
+                    comment,
+                ),
+            )
+            await db.commit()
+            return int(cursor.lastrowid)
 
     # ── Designers ──────────────────────────────────────────────────────────
 
@@ -1236,4 +1396,30 @@ def _row_to_designer(row: tuple) -> Designer:
         d7_nick=row[2],
         role=row[3] or "",
         wallet=row[4],
+    )
+
+
+def _row_to_employee(row: tuple) -> Employee:
+    return Employee(
+        id=int(row[0]),
+        telegram_id=row[1],
+        username=row[2],
+        display_name=row[3],
+        role=row[4] or "",
+        wallet=row[5] or "",
+        is_active=bool(row[6]),
+    )
+
+
+def _row_to_smm_assignment(row: tuple) -> SmmAssignment:
+    return SmmAssignment(
+        id=int(row[0]),
+        smm_employee_id=int(row[1]),
+        channel_name=row[2],
+        geo=row[3] or "",
+        daily_rate_usdt=float(row[4] or 0),
+        active_from=row[5],
+        active_to=row[6],
+        status=row[7] or "active",
+        comment=row[8] or "",
     )
