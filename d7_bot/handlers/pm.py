@@ -44,6 +44,80 @@ async def _check_pm(message: Message, db: Database, config: Config) -> Employee 
     return employee
 
 
+@router.message(Command("pm_smm_assign"))
+async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    parts = (message.text or "").split(maxsplit=4)
+    if len(parts) < 5:
+        await message.answer(
+            "Использование: <code>/pm_smm_assign &lt;employee_id&gt; &lt;channel_name&gt; &lt;geo&gt; &lt;daily_rate&gt;</code>\n"
+            "Пример: <code>/pm_smm_assign 12 PeruNews PERU 15</code>"
+        )
+        return
+
+    employee_id_raw, channel_name, geo, rate_raw = parts[1], parts[2], parts[3], parts[4]
+    if not employee_id_raw.isdigit():
+        await message.answer("❌ employee_id должен быть числом.")
+        return
+
+    employee = await db.get_employee(int(employee_id_raw))
+    if not employee or employee.role != "smm" or not employee.is_active:
+        await message.answer("❌ Активный SMM сотрудник не найден.")
+        return
+
+    try:
+        daily_rate = float(rate_raw.replace(',', '.'))
+        if daily_rate <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ daily_rate должен быть положительным числом.")
+        return
+
+    assignment_id = await db.add_smm_assignment(
+        smm_employee_id=employee.id,
+        channel_name=channel_name,
+        geo=geo.upper(),
+        daily_rate_usdt=daily_rate,
+        active_from=moscow_today().isoformat(),
+    )
+    await message.answer(
+        "✅ <b>SMM assignment создан</b>\n\n"
+        f"Сотрудник: <b>{html.escape(employee.display_name)}</b>\n"
+        f"Канал: <b>{html.escape(channel_name)}</b>\n"
+        f"Гео: <b>{html.escape(geo.upper())}</b>\n"
+        f"Ставка: <b>{daily_rate:.2f} USDT/день</b>\n"
+        f"Assignment ID: <code>{assignment_id}</code>"
+    )
+
+
+@router.message(Command("pm_smm_assignments"))
+async def cmd_pm_smm_assignments(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    rows = await db.list_active_smm_assignments_detailed()
+    if not rows:
+        await message.answer("ℹ️ Активных SMM assignment'ов пока нет.")
+        return
+
+    lines = ["📋 <b>Активные SMM assignments</b>", ""]
+    current_employee_id: int | None = None
+    for assignment, employee in rows:
+        if employee.id != current_employee_id:
+            current_employee_id = employee.id
+            lines.append(f"👤 <b>{html.escape(employee.display_name)}</b> — employee ID <code>{employee.id}</code>")
+        lines.append(
+            f"• assignment ID <code>{assignment.id}</code> | <b>{html.escape(assignment.channel_name)}</b>"
+            f" | {html.escape(assignment.geo or '—')} | {assignment.daily_rate_usdt:.2f} USDT/день"
+        )
+
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("pm_smm_report"))
 async def cmd_pm_smm_report(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     pm = await _check_pm(message, db, config)

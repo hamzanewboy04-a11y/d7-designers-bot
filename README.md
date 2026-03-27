@@ -72,6 +72,14 @@ V-1001 5.00
 - `/analyticsmonth` — аналитика за 30 дней;
 - `/analyticsfrom YYYY-MM-DD YYYY-MM-DD` — аналитика за произвольный период.
 
+### 5. PM / SMM skeleton
+Начальный PM-only flow для новой SMM-модели:
+- `/pm_smm_assign <employee_id> <channel_name> <geo> <daily_rate>` — создать assignment для SMM;
+- `/pm_smm_assignments` — посмотреть активные assignment'ы;
+- `/pm_smm_report` — внести daily entry за SMM через пошаговый flow.
+
+> Это переходный skeleton под новую бизнес-логику. Текущий designer flow продолжает работать отдельно.
+
 Также администраторам доступна inline-панель `🛠 Админка` с разделами:
 - Dashboard;
 - Сотрудники;

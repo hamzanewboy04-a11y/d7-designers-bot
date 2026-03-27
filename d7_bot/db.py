@@ -677,6 +677,22 @@ class Database:
             rows = await cursor.fetchall()
             return [_row_to_smm_assignment(row) for row in rows]
 
+    async def list_active_smm_assignments_detailed(self) -> list[tuple[SmmAssignment, Employee]]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT a.id, a.smm_employee_id, a.channel_name, a.geo, a.daily_rate_usdt,
+                       a.active_from, a.active_to, a.status, a.comment,
+                       e.id, e.telegram_id, e.username, e.display_name, e.role, e.wallet, e.is_active
+                FROM smm_assignments a
+                JOIN employees e ON e.id = a.smm_employee_id
+                WHERE a.status = 'active' AND e.is_active = 1
+                ORDER BY e.display_name COLLATE NOCASE, a.channel_name COLLATE NOCASE
+                """
+            )
+            rows = await cursor.fetchall()
+            return [(_row_to_smm_assignment(row[:9]), _row_to_employee(row[9:16])) for row in rows]
+
     async def add_smm_daily_entry_v2(
         self,
         smm_employee_id: int,
