@@ -162,6 +162,19 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## Smoke tests
+Минимальный baseline-тест набор запускается стандартным `unittest`:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Что сейчас покрыто:
+- парсинг task codes;
+- базовый smoke по БД;
+- дедупликация задач;
+- выборка сотрудников по роли.
+
 ## Деплой
 Минимально для старта нужен только:
 - `BOT_TOKEN` или `TELEGRAM_BOT_TOKEN`
