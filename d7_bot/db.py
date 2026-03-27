@@ -245,6 +245,144 @@ class Database:
                 await db.commit()
                 logger.info("Reports v7 task fields migration complete.")
 
+            # v9: new domain model groundwork (kept alongside legacy tables)
+            await db.executescript("""
+                CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER UNIQUE,
+                    username TEXT,
+                    display_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    wallet TEXT NOT NULL DEFAULT '',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS smm_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    smm_employee_id INTEGER NOT NULL,
+                    channel_name TEXT NOT NULL,
+                    geo TEXT NOT NULL DEFAULT '',
+                    daily_rate_usdt REAL NOT NULL DEFAULT 0,
+                    active_from TEXT,
+                    active_to TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (smm_employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS review_rate_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    review_type TEXT NOT NULL UNIQUE,
+                    default_unit_price REAL NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS review_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    report_date TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'submitted',
+                    verified_by_pm INTEGER,
+                    verified_at TEXT,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (verified_by_pm) REFERENCES employees(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS review_entry_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    review_entry_id INTEGER NOT NULL,
+                    review_type TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 0,
+                    unit_price REAL NOT NULL DEFAULT 0,
+                    total_usdt REAL NOT NULL DEFAULT 0,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (review_entry_id) REFERENCES review_entries(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS smm_daily_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    smm_employee_id INTEGER NOT NULL,
+                    entered_by_pm_id INTEGER NOT NULL,
+                    report_date TEXT NOT NULL,
+                    assignment_id INTEGER,
+                    channel_name_snapshot TEXT NOT NULL DEFAULT '',
+                    geo_snapshot TEXT NOT NULL DEFAULT '',
+                    daily_rate_snapshot REAL NOT NULL DEFAULT 0,
+                    total_usdt REAL NOT NULL DEFAULT 0,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (smm_employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (entered_by_pm_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (assignment_id) REFERENCES smm_assignments(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS payment_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    payout_mode TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    period_start TEXT,
+                    period_end TEXT,
+                    total_usdt REAL NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    paid_at TEXT,
+                    paid_by INTEGER,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (paid_by) REFERENCES employees(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS payment_batch_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    source_table TEXT NOT NULL,
+                    source_entry_id INTEGER NOT NULL,
+                    amount_usdt REAL NOT NULL DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (batch_id) REFERENCES payment_batches(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role);
+                CREATE INDEX IF NOT EXISTS idx_smm_assignments_employee ON smm_assignments(smm_employee_id);
+                CREATE INDEX IF NOT EXISTS idx_review_entries_employee_date ON review_entries(employee_id, report_date);
+                CREATE INDEX IF NOT EXISTS idx_smm_daily_entries_employee_date ON smm_daily_entries(smm_employee_id, report_date);
+                CREATE INDEX IF NOT EXISTS idx_payment_batches_employee_status ON payment_batches(employee_id, status);
+            """)
+
+            # Bootstrap employees from legacy designers table.
+            await db.execute("""
+                INSERT INTO employees (telegram_id, username, display_name, role, wallet)
+                SELECT d.telegram_id, d.username, d.d7_nick, d.role, d.wallet
+                FROM designers d
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM employees e WHERE e.telegram_id = d.telegram_id
+                )
+            """)
+
+            # Seed baseline reviewer rate rules.
+            await db.executescript("""
+                INSERT OR IGNORE INTO review_rate_rules (review_type, default_unit_price, comment)
+                VALUES ('small', 0, 'Default small review rate');
+                INSERT OR IGNORE INTO review_rate_rules (review_type, default_unit_price, comment)
+                VALUES ('large', 0, 'Default large review rate');
+                INSERT OR IGNORE INTO review_rate_rules (review_type, default_unit_price, comment)
+                VALUES ('custom', 0, 'Custom reviewer rate');
+            """)
+            await db.commit()
+
     async def init(self) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.executescript("""
@@ -293,6 +431,120 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_reports_date ON reports(report_date);
                 CREATE INDEX IF NOT EXISTS idx_reports_designer ON reports(designer_id);
+
+                CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER UNIQUE,
+                    username TEXT,
+                    display_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    wallet TEXT NOT NULL DEFAULT '',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS smm_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    smm_employee_id INTEGER NOT NULL,
+                    channel_name TEXT NOT NULL,
+                    geo TEXT NOT NULL DEFAULT '',
+                    daily_rate_usdt REAL NOT NULL DEFAULT 0,
+                    active_from TEXT,
+                    active_to TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (smm_employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS review_rate_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    review_type TEXT NOT NULL UNIQUE,
+                    default_unit_price REAL NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS review_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    report_date TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'submitted',
+                    verified_by_pm INTEGER,
+                    verified_at TEXT,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (verified_by_pm) REFERENCES employees(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS review_entry_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    review_entry_id INTEGER NOT NULL,
+                    review_type TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 0,
+                    unit_price REAL NOT NULL DEFAULT 0,
+                    total_usdt REAL NOT NULL DEFAULT 0,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (review_entry_id) REFERENCES review_entries(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS smm_daily_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    smm_employee_id INTEGER NOT NULL,
+                    entered_by_pm_id INTEGER NOT NULL,
+                    report_date TEXT NOT NULL,
+                    assignment_id INTEGER,
+                    channel_name_snapshot TEXT NOT NULL DEFAULT '',
+                    geo_snapshot TEXT NOT NULL DEFAULT '',
+                    daily_rate_snapshot REAL NOT NULL DEFAULT 0,
+                    total_usdt REAL NOT NULL DEFAULT 0,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (smm_employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (entered_by_pm_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (assignment_id) REFERENCES smm_assignments(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS payment_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    payout_mode TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    period_start TEXT,
+                    period_end TEXT,
+                    total_usdt REAL NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    paid_at TEXT,
+                    paid_by INTEGER,
+                    comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+                    FOREIGN KEY (paid_by) REFERENCES employees(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS payment_batch_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    source_table TEXT NOT NULL,
+                    source_entry_id INTEGER NOT NULL,
+                    amount_usdt REAL NOT NULL DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (batch_id) REFERENCES payment_batches(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role);
+                CREATE INDEX IF NOT EXISTS idx_smm_assignments_employee ON smm_assignments(smm_employee_id);
+                CREATE INDEX IF NOT EXISTS idx_review_entries_employee_date ON review_entries(employee_id, report_date);
+                CREATE INDEX IF NOT EXISTS idx_smm_daily_entries_employee_date ON smm_daily_entries(smm_employee_id, report_date);
+                CREATE INDEX IF NOT EXISTS idx_payment_batches_employee_status ON payment_batches(employee_id, status);
             """)
             await db.commit()
 
