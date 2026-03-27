@@ -9,7 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from d7_bot.config import load_config
 from d7_bot.db import Database
-from d7_bot.handlers import admin, common, pm, register, report
+from d7_bot.handlers import admin, common, pm, register, report, reviewer_v2
 from d7_bot.scheduler import setup_scheduler
 from d7_bot.sheets import GoogleSheetsExporter
 
@@ -62,6 +62,7 @@ async def main() -> None:
     # Order matters: specific routers first, fallback (common) last
     dp.include_router(register.router)
     dp.include_router(report.router)
+    dp.include_router(reviewer_v2.router)
     dp.include_router(pm.router)
     dp.include_router(admin.router)
     dp.include_router(common.router)  # common must be last (contains fallback handler)

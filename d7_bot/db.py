@@ -94,6 +94,15 @@ class SmmAssignment:
     comment: str
 
 
+@dataclass
+class ReviewEntryItem:
+    review_type: str
+    quantity: int
+    unit_price: float
+    total_usdt: float
+    comment: str = ""
+
+
 class Database:
     def __init__(self, path: str) -> None:
         self.path = path
@@ -950,6 +959,90 @@ class Database:
                 }
                 for row in rows
             ]
+
+    async def list_review_rate_rules(self) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT review_type, default_unit_price, comment
+                FROM review_rate_rules
+                WHERE is_active = 1
+                ORDER BY review_type COLLATE NOCASE
+                """
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'review_type': row[0],
+                    'default_unit_price': float(row[1] or 0),
+                    'comment': row[2] or '',
+                }
+                for row in rows
+            ]
+
+    async def create_review_entry_v2(
+        self,
+        employee_id: int,
+        report_date: str,
+        items: list[ReviewEntryItem],
+        comment: str = '',
+    ) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO review_entries (employee_id, report_date, status, comment)
+                VALUES (?, ?, 'submitted', ?)
+                """,
+                (employee_id, report_date, comment),
+            )
+            review_entry_id = int(cursor.lastrowid)
+            for item in items:
+                await db.execute(
+                    """
+                    INSERT INTO review_entry_items
+                        (review_entry_id, review_type, quantity, unit_price, total_usdt, comment)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        review_entry_id,
+                        item.review_type,
+                        item.quantity,
+                        item.unit_price,
+                        item.total_usdt,
+                        item.comment,
+                    ),
+                )
+            await db.commit()
+            return review_entry_id
+
+    async def get_review_entry_summary(self, review_entry_id: int) -> dict | None:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT re.id, re.employee_id, e.display_name, re.report_date, re.status,
+                       COALESCE(SUM(ri.total_usdt), 0.0) AS total_usdt,
+                       COUNT(ri.id) AS item_count
+                FROM review_entries re
+                JOIN employees e ON e.id = re.employee_id
+                LEFT JOIN review_entry_items ri ON ri.review_entry_id = re.id
+                WHERE re.id = ?
+                GROUP BY re.id, re.employee_id, e.display_name, re.report_date, re.status
+                LIMIT 1
+                """,
+                (review_entry_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {
+                'review_entry_id': int(row[0]),
+                'employee_id': int(row[1]),
+                'display_name': row[2],
+                'report_date': row[3],
+                'status': row[4],
+                'total_usdt': float(row[5]),
+                'item_count': int(row[6]),
+            }
 
     # ── Designers ──────────────────────────────────────────────────────────
 
