@@ -76,7 +76,9 @@ V-1001 5.00
 Начальный PM-only flow для новой SMM-модели:
 - `/pm_smm_assign <employee_id> <channel_name> <geo> <daily_rate>` — создать assignment для SMM;
 - `/pm_smm_assignments` — посмотреть активные assignment'ы;
-- `/pm_smm_report` — внести daily entry за SMM через пошаговый flow.
+- `/pm_smm_report` — внести daily entry за SMM через пошаговый flow;
+- `/pm_smm_weekly` — weekly payroll preview по всем SMM за прошлую неделю;
+- `/pm_smm_weekly_employee <employee_id>` — детализация по одному SMM за прошлую неделю.
 
 > Это переходный skeleton под новую бизнес-логику. Текущий designer flow продолжает работать отдельно.
 

@@ -118,6 +118,88 @@ async def cmd_pm_smm_assignments(message: Message, db: Database, config: Config)
     await message.answer("\n".join(lines))
 
 
+def _last_week_range() -> tuple[str, str]:
+    today = moscow_today()
+    this_monday = today - timedelta(days=today.weekday())
+    last_monday = this_monday - timedelta(days=7)
+    last_sunday = this_monday - timedelta(days=1)
+    return last_monday.isoformat(), last_sunday.isoformat()
+
+
+@router.message(Command("pm_smm_weekly"))
+async def cmd_pm_smm_weekly(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    period_start, period_end = _last_week_range()
+    rows = await db.get_smm_weekly_summary(period_start, period_end)
+    if not rows:
+        await message.answer(
+            f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> у SMM нет записей."
+        )
+        return
+
+    grand_total = sum(item['total_usdt'] for item in rows)
+    lines = [
+        "💸 <b>SMM weekly payroll preview</b>",
+        f"📅 Период: <code>{period_start}</code> — <code>{period_end}</code>",
+        f"💰 Итого по всем SMM: <b>{grand_total:.2f} USDT</b>",
+        "",
+    ]
+    for item in rows:
+        lines.append(
+            f"• <b>{html.escape(item['display_name'])}</b> — employee ID <code>{item['employee_id']}</code>\n"
+            f"  {item['entry_count']} записей / {item['day_count']} дней / <b>{item['total_usdt']:.2f} USDT</b>"
+        )
+
+    lines.append("\nДля детализации: <code>/pm_smm_weekly_employee &lt;employee_id&gt;</code>")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("pm_smm_weekly_employee"))
+async def cmd_pm_smm_weekly_employee(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2 or not args[1].strip().isdigit():
+        await message.answer(
+            "Использование: <code>/pm_smm_weekly_employee &lt;employee_id&gt;</code>\n"
+            "Пример: <code>/pm_smm_weekly_employee 12</code>"
+        )
+        return
+
+    employee = await db.get_employee(int(args[1].strip()))
+    if not employee or employee.role != 'smm':
+        await message.answer("❌ SMM сотрудник не найден.")
+        return
+
+    period_start, period_end = _last_week_range()
+    rows = await db.get_smm_weekly_details(employee.id, period_start, period_end)
+    if not rows:
+        await message.answer(
+            f"ℹ️ У <b>{html.escape(employee.display_name)}</b> нет записей за период <code>{period_start}</code> — <code>{period_end}</code>."
+        )
+        return
+
+    total = sum(item['total_usdt'] for item in rows)
+    lines = [
+        f"💼 <b>{html.escape(employee.display_name)}</b>",
+        f"📅 Период: <code>{period_start}</code> — <code>{period_end}</code>",
+        f"💰 Итого: <b>{total:.2f} USDT</b>",
+        "",
+    ]
+    for item in rows:
+        comment_part = f" | {html.escape(item['comment'])}" if item['comment'] else ""
+        lines.append(
+            f"• <code>{html.escape(item['report_date'])}</code> | <b>{html.escape(item['channel_name'])}</b>"
+            f" | {html.escape(item['geo'] or '—')} | {item['total_usdt']:.2f} USDT{comment_part}"
+        )
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("pm_smm_report"))
 async def cmd_pm_smm_report(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     pm = await _check_pm(message, db, config)

@@ -727,6 +727,58 @@ class Database:
             await db.commit()
             return int(cursor.lastrowid)
 
+    async def get_smm_weekly_summary(self, period_start: str, period_end: str) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT e.id, e.display_name,
+                       COUNT(s.id) AS entry_count,
+                       COUNT(DISTINCT s.report_date) AS day_count,
+                       COALESCE(SUM(s.total_usdt), 0.0) AS total_usdt
+                FROM smm_daily_entries s
+                JOIN employees e ON e.id = s.smm_employee_id
+                WHERE s.report_date >= ? AND s.report_date <= ?
+                GROUP BY e.id, e.display_name
+                ORDER BY total_usdt DESC, e.display_name COLLATE NOCASE
+                """,
+                (period_start, period_end),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "employee_id": int(row[0]),
+                    "display_name": row[1],
+                    "entry_count": int(row[2]),
+                    "day_count": int(row[3]),
+                    "total_usdt": float(row[4]),
+                }
+                for row in rows
+            ]
+
+    async def get_smm_weekly_details(self, employee_id: int, period_start: str, period_end: str) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT report_date, channel_name_snapshot, geo_snapshot, daily_rate_snapshot, total_usdt, comment
+                FROM smm_daily_entries
+                WHERE smm_employee_id = ? AND report_date >= ? AND report_date <= ?
+                ORDER BY report_date ASC, channel_name_snapshot COLLATE NOCASE
+                """,
+                (employee_id, period_start, period_end),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "report_date": row[0],
+                    "channel_name": row[1],
+                    "geo": row[2] or "",
+                    "daily_rate": float(row[3] or 0),
+                    "total_usdt": float(row[4] or 0),
+                    "comment": row[5] or "",
+                }
+                for row in rows
+            ]
+
     # ── Designers ──────────────────────────────────────────────────────────
 
     async def upsert_designer(self, designer: Designer) -> None:
