@@ -8,7 +8,7 @@ from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from d7_bot.config import Config
-from d7_bot.db import Database
+from d7_bot.db import Database, moscow_today
 from d7_bot.sheets import GoogleSheetsExporter
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ async def daily_admin_summary(
     Daily job: collect yesterday's tasks and send a summary to all admins.
     Also syncs data to Google Sheets if enabled.
     """
-    yesterday = date.today() - timedelta(days=1)
+    yesterday = moscow_today() - timedelta(days=1)
     logger.info("Running daily_admin_summary for date: %s", yesterday)
 
     rows = await db.list_tasks_by_date(yesterday)
@@ -134,7 +134,7 @@ async def missed_reports_job(bot: Bot, db: Database, config: Config) -> None:
     At 12:00 MSK, notify admins about employees who haven't submitted yesterday's report.
     Does NOT send any message to the employees themselves.
     """
-    yesterday = date.today() - timedelta(days=1)
+    yesterday = moscow_today() - timedelta(days=1)
     logger.info("Running missed_reports_job for date: %s", yesterday)
 
     from d7_bot.handlers.admin import _get_missed_text

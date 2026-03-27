@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+import zoneinfo
 
 import aiosqlite
 
 logger = logging.getLogger(__name__)
+_MOSCOW = zoneinfo.ZoneInfo("Europe/Moscow")
+
+
+def moscow_today() -> date:
+    """Return current calendar date in Europe/Moscow timezone."""
+    return datetime.now(tz=_MOSCOW).date()
+
+
+def utc_now_iso() -> str:
+    """Return current UTC timestamp in ISO format."""
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 @dataclass
@@ -430,10 +442,10 @@ class Database:
         self, designer_id: int, days: int = 7
     ) -> list[tuple]:
         """
-        Return tasks for *designer_id* over the last *days* days (inclusive today).
+        Return tasks for *designer_id* over the last *days* days (inclusive today, Moscow time).
         Each row: (report_date, task_code, cost_usdt)
         """
-        since = (datetime.utcnow().date() - timedelta(days=days - 1)).isoformat()
+        since = (moscow_today() - timedelta(days=days - 1)).isoformat()
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
@@ -448,10 +460,10 @@ class Database:
 
     async def get_designer_stats(self, designer_id: int, days: int = 7) -> dict:
         """
-        Return statistics for a designer over the last *days* days.
+        Return statistics for a designer over the last *days* days (Moscow time).
         Returns {"task_count": int, "total_usdt": float}
         """
-        since = (datetime.utcnow().date() - timedelta(days=days - 1)).isoformat()
+        since = (moscow_today() - timedelta(days=days - 1)).isoformat()
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """
@@ -477,7 +489,7 @@ class Database:
         payment_comment: str = "",
     ) -> None:
         """Update payment_status for all tasks of a designer for a given date."""
-        paid_at = datetime.utcnow().isoformat() if status == "paid" else None
+        paid_at = utc_now_iso() if status == "paid" else None
         paid_by_val = paid_by if status == "paid" else None
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
@@ -767,11 +779,11 @@ class Database:
 
     async def get_employee_ranking(self, days: int) -> list[dict]:
         """
-        Return employee ranking for the last `days` days.
+        Return employee ranking for the last `days` days (Moscow time).
         Each entry: {"d7_nick": str, "role": str, "total_usdt": float, "task_count": int}
         Sorted by total_usdt descending.
         """
-        since = (datetime.utcnow().date() - timedelta(days=days - 1)).isoformat()
+        since = (moscow_today() - timedelta(days=days - 1)).isoformat()
         async with aiosqlite.connect(self.path) as db:
             cursor = await db.execute(
                 """

@@ -13,7 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from d7_bot.config import Config
-from d7_bot.db import Database, ReviewerEntry, TaskEntry
+from d7_bot.db import Database, ReviewerEntry, TaskEntry, moscow_today
 from d7_bot.keyboards import date_keyboard, main_menu_keyboard, payment_keyboard
 from d7_bot.sheets import GoogleSheetsExporter
 
@@ -160,7 +160,7 @@ _TASK_FORMAT_HINT = (
 
 @router.callback_query(ReportStates.choose_date, F.data == "report_date:yesterday")
 async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    yesterday = (moscow_today() - timedelta(days=1)).isoformat()
     await state.update_data(report_date=yesterday)
     await callback.answer()
     designer = await db.get_designer(callback.from_user.id) if callback.from_user else None
@@ -178,7 +178,7 @@ async def cb_date_yesterday(callback: CallbackQuery, state: FSMContext, db: Data
 
 @router.callback_query(ReportStates.choose_date, F.data == "report_date:today")
 async def cb_date_today(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
-    today = date.today().isoformat()
+    today = moscow_today().isoformat()
     await state.update_data(report_date=today)
     await callback.answer()
     designer = await db.get_designer(callback.from_user.id) if callback.from_user else None
@@ -268,7 +268,7 @@ async def step_tasks(
         return
 
     state_data = await state.get_data()
-    report_date = state_data.get("report_date", date.today().isoformat())
+    report_date = state_data.get("report_date", moscow_today().isoformat())
 
     lines = [line.strip() for line in raw.splitlines() if line.strip()]
 
