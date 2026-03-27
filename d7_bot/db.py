@@ -45,6 +45,19 @@ class ReviewerEntry:
         return float(self.review_count) * float(self.unit_price)
 
 
+@dataclass
+class SmmDailyEntry:
+    subject_user_id: int
+    entered_by_user_id: int
+    report_date: str
+    fixed_day_amount: float
+    comment: str = ""
+
+    @property
+    def cost_usdt(self) -> float:
+        return float(self.fixed_day_amount)
+
+
 class Database:
     def __init__(self, path: str) -> None:
         self.path = path
@@ -919,6 +932,47 @@ class Database:
             await db.commit()
             return True
 
+
+    async def list_designers_by_role(self, role: str) -> list[Designer]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT telegram_id, username, d7_nick, role, wallet FROM designers WHERE role = ? ORDER BY d7_nick COLLATE NOCASE",
+                (role,),
+            )
+            rows = await cursor.fetchall()
+            return [_row_to_designer(row) for row in rows]
+
+    async def add_smm_daily_entry(self, entry: SmmDailyEntry) -> bool:
+        task_code = "smm_daily_fixed"
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                "SELECT 1 FROM reports WHERE entry_type = 'smm_daily_fixed' AND COALESCE(subject_user_id, designer_id) = ? AND report_date = ? LIMIT 1",
+                (entry.subject_user_id, entry.report_date),
+            )
+            exists = await cursor.fetchone()
+            if exists:
+                return False
+            await db.execute(
+                """
+                INSERT INTO reports
+                    (designer_id, subject_user_id, entered_by_user_id, entry_type,
+                     report_date, task_code, cost_usdt, payment_status,
+                     comment, fixed_day_amount)
+                VALUES (?, ?, ?, 'smm_daily_fixed', ?, ?, ?, 'pending', ?, ?)
+                """,
+                (
+                    entry.subject_user_id,
+                    entry.subject_user_id,
+                    entry.entered_by_user_id,
+                    entry.report_date,
+                    task_code,
+                    entry.cost_usdt,
+                    entry.comment,
+                    entry.fixed_day_amount,
+                ),
+            )
+            await db.commit()
+            return True
 
 def _row_to_designer(row: tuple) -> Designer:
     return Designer(
