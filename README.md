@@ -107,7 +107,8 @@ V-1001 5.00
 - обновляет статус оплаты в `reports`.
 
 ## Стек
-- Python 3.11+
+- Рекомендуемо: Python 3.11+
+- Минимально протестировано локально: Python 3.9.6
 - aiogram 3
 - aiosqlite
 - APScheduler
@@ -155,18 +156,37 @@ GOOGLE_SERVICE_ACCOUNT_JSON={...json...}
 ```
 
 ## Запуск локально
+Рекомендуемый вариант:
+
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
+
+Если на машине пока есть только системный Python 3.9:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+> Для стабильного dev/prod baseline лучше перейти на Python 3.11+.
 
 ## Smoke tests
 Минимальный baseline-тест набор запускается стандартным `unittest`:
 
 ```bash
 python -m unittest discover -s tests -v
+```
+
+Если используете локальный venv:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
 Что сейчас покрыто:
