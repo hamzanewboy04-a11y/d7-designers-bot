@@ -80,7 +80,9 @@ V-1001 5.00
 - `/pm_smm_weekly` — weekly payroll preview по всем SMM за прошлую неделю;
 - `/pm_smm_weekly_employee <employee_id>` — детализация по одному SMM за прошлую неделю;
 - `/pm_smm_batch_create` — создать weekly payout batch'и по прошлой неделе;
-- `/pm_smm_batches` — посмотреть pending SMM weekly batch'и.
+- `/pm_smm_batches` — посмотреть pending SMM weekly batch'и;
+- `/pm_smm_batch_paid <batch_id>` — отметить weekly batch как оплаченный;
+- `/pm_smm_batch_history` — посмотреть историю SMM batch'ей.
 
 > Это переходный skeleton под новую бизнес-логику. Текущий designer flow продолжает работать отдельно.
 

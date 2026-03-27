@@ -885,6 +885,72 @@ class Database:
                 for row in rows
             ]
 
+    async def mark_smm_batch_paid(self, batch_id: int, paid_by_employee_id: int) -> dict | None:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end, pb.total_usdt, pb.status
+                FROM payment_batches pb
+                JOIN employees e ON e.id = pb.employee_id
+                WHERE pb.id = ? AND pb.source_type = 'smm' AND pb.payout_mode = 'weekly'
+                LIMIT 1
+                """,
+                (batch_id,),
+            )
+            row = await cursor.fetchone()
+            if not row or row[6] != 'pending':
+                return None
+
+            await db.execute(
+                """
+                UPDATE payment_batches
+                SET status = 'paid', paid_at = ?, paid_by = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (utc_now_iso(), paid_by_employee_id, batch_id),
+            )
+            await db.commit()
+            return {
+                'batch_id': int(row[0]),
+                'employee_id': int(row[1]),
+                'display_name': row[2],
+                'period_start': row[3],
+                'period_end': row[4],
+                'total_usdt': float(row[5]),
+            }
+
+    async def list_recent_smm_batches(self, limit: int = 10) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end,
+                       pb.total_usdt, pb.status, pb.paid_at, COUNT(pbi.id) AS item_count
+                FROM payment_batches pb
+                JOIN employees e ON e.id = pb.employee_id
+                LEFT JOIN payment_batch_items pbi ON pbi.batch_id = pb.id
+                WHERE pb.source_type = 'smm' AND pb.payout_mode = 'weekly'
+                GROUP BY pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end, pb.total_usdt, pb.status, pb.paid_at
+                ORDER BY COALESCE(pb.paid_at, pb.created_at) DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'batch_id': int(row[0]),
+                    'employee_id': int(row[1]),
+                    'display_name': row[2],
+                    'period_start': row[3],
+                    'period_end': row[4],
+                    'total_usdt': float(row[5]),
+                    'status': row[6],
+                    'paid_at': row[7],
+                    'item_count': int(row[8]),
+                }
+                for row in rows
+            ]
+
     # ── Designers ──────────────────────────────────────────────────────────
 
     async def upsert_designer(self, designer: Designer) -> None:
