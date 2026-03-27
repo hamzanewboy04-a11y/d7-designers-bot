@@ -12,6 +12,7 @@ AVAILABLE_ROLES: list[tuple[str, str]] = [
     ("🎨 Дизайнер", "designer"),
     ("📱 SMM", "smm"),
     ("⭐ Отзовик", "reviewer"),
+    ("🗂 Проджект-менеджер", "project_manager"),
 ]
 
 # Human-readable role names (Russian)
@@ -19,6 +20,7 @@ ROLE_LABELS: dict[str, str] = {
     "designer": "Дизайнер",
     "smm": "SMM",
     "reviewer": "Отзовик",
+    "project_manager": "Проджект-менеджер",
 }
 
 # Text labels for main menu buttons (used to match incoming messages)
