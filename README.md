@@ -220,6 +220,33 @@ python main.py
 - SMM assignment / daily entry / weekly batch flow;
 - reviewer v2 verify / payout batch flow.
 
+## Railway deploy baseline
+В репозитории подготовлены:
+- `.gitignore`
+- `Procfile`
+- `runtime.txt`
+- `railway.json`
+
+Команда запуска:
+```bash
+python main.py
+```
+
+Минимальные env для Railway:
+- `BOT_TOKEN` или `TELEGRAM_BOT_TOKEN`
+- `ADMIN_IDS`
+- `DB_PATH`
+- `REPORT_HOUR_UTC`
+
+Опционально:
+- `GOOGLE_SHEET_ID`
+- `GOOGLE_SERVICE_ACCOUNT_JSON`
+
+Важно:
+- Railway filesystem эфемерный;
+- текущий SQLite-путь подходит для тестового/временного деплоя;
+- для нормального production лучше внешний persistent storage или PostgreSQL.
+
 ## Текущее состояние
 
 ### Уже сделано
@@ -232,14 +259,13 @@ python main.py
 - добавлен smoke baseline для next-gen flows.
 
 ### Ещё не завершено
-- reviewer v2 ещё не встроен в основной `/report` flow;
 - нет web admin panel;
 - нет полноценного service/API слоя;
-- README отражает текущее состояние, но проект всё ещё transition-phase.
+- Railway deploy baseline подготовлен, но production storage ещё не решён;
+- проект всё ещё transition-phase.
 
 ## Следующие логичные шаги
-1. Перевести reviewer v2 из optional flow в основной flow для reviewer.
-2. Добавить уведомления сотрудникам по новым batch flows.
-3. Выделить service layer поверх `db.py`.
-4. Подготовить web admin panel groundwork.
-5. Добавить больше тестов на business rules и edge cases.
+1. Выделить service layer поверх `db.py`.
+2. Подготовить web admin panel groundwork.
+3. Решить вопрос persistent storage для Railway / production.
+4. Добавить больше тестов на business rules и edge cases.
