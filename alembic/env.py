@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 
 from storage.base import Base
 from storage import models  # noqa: F401
+from storage.engine import normalize_database_url
 
 config = context.config
 if config.config_file_name is not None:
@@ -15,7 +16,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-database_url = os.getenv("DATABASE_URL")
+database_url = normalize_database_url(os.getenv("DATABASE_URL"))
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
