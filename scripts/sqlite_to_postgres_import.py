@@ -8,6 +8,8 @@ from collections.abc import Iterable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from storage.engine import normalize_database_url
+
 # Postgres cutover is currently focused on next-gen domain tables only.
 # Legacy SQLite tables (designers/admins/reports) are intentionally excluded.
 TABLES = [
@@ -94,7 +96,11 @@ async def main() -> None:
     parser.add_argument("--truncate", action="store_true")
     args = parser.parse_args()
 
-    engine = create_async_engine(args.database_url, future=True)
+    database_url = normalize_database_url(args.database_url)
+    if not database_url:
+        raise ValueError("A PostgreSQL DATABASE_URL is required")
+
+    engine = create_async_engine(database_url, future=True)
     async with engine.begin() as conn:
         if args.truncate:
             await truncate_tables(conn, TABLES)
