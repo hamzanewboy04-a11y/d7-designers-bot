@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,8 +14,8 @@ class EmployeeModel(Base):
     __tablename__ = "employees"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    telegram_id: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
-    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    telegram_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, nullable=True)
+    username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_name: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(64))
     wallet: Mapped[str] = mapped_column(String(255), default="")
@@ -31,8 +32,8 @@ class SmmAssignmentModel(Base):
     channel_name: Mapped[str] = mapped_column(String(255))
     geo: Mapped[str] = mapped_column(String(64), default="")
     daily_rate_usdt: Mapped[float] = mapped_column(Float, default=0)
-    active_from: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    active_to: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    active_from: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    active_to: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="active")
     comment: Mapped[str] = mapped_column(Text, default="")
 
@@ -54,8 +55,8 @@ class ReviewEntryModel(Base):
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
     report_date: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="submitted")
-    verified_by_pm: Mapped[int | None] = mapped_column(ForeignKey("employees.id", ondelete="SET NULL"), nullable=True)
-    verified_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verified_by_pm: Mapped[Optional[int]] = mapped_column(ForeignKey("employees.id", ondelete="SET NULL"), nullable=True)
+    verified_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     comment: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -84,7 +85,7 @@ class SmmDailyEntryModel(Base):
     smm_employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
     entered_by_pm_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
     report_date: Mapped[str] = mapped_column(String(32))
-    assignment_id: Mapped[int | None] = mapped_column(ForeignKey("smm_assignments.id", ondelete="SET NULL"), nullable=True)
+    assignment_id: Mapped[Optional[int]] = mapped_column(ForeignKey("smm_assignments.id", ondelete="SET NULL"), nullable=True)
     channel_name_snapshot: Mapped[str] = mapped_column(String(255), default="")
     geo_snapshot: Mapped[str] = mapped_column(String(64), default="")
     daily_rate_snapshot: Mapped[float] = mapped_column(Float, default=0)
@@ -100,12 +101,12 @@ class PaymentBatchModel(Base):
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"))
     payout_mode: Mapped[str] = mapped_column(String(32))
     source_type: Mapped[str] = mapped_column(String(64))
-    period_start: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    period_end: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    period_start: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    period_end: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     total_usdt: Mapped[float] = mapped_column(Float, default=0)
     status: Mapped[str] = mapped_column(String(32), default="pending")
-    paid_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    paid_by: Mapped[int | None] = mapped_column(ForeignKey("employees.id", ondelete="SET NULL"), nullable=True)
+    paid_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    paid_by: Mapped[Optional[int]] = mapped_column(ForeignKey("employees.id", ondelete="SET NULL"), nullable=True)
     comment: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
