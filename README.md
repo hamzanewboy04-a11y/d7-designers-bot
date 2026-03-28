@@ -1,128 +1,133 @@
 # D7 Designers Bot
 
-Telegram-бот для команды D7 с учётом сотрудников, ежедневных отчётов, оплат, аналитики и выгрузки в Google Sheets.
+Telegram-бот и evolving internal ops/payroll system для команды D7.
 
-## Что умеет бот
+Проект находится в переходном состоянии:
+- legacy designer flow уже рабочий;
+- next-gen domain model для SMM / reviewer / payroll уже внедряется;
+- часть старых flows сохранена для совместимости.
 
-### 1. Профили сотрудников
-Команда: `/register`
+## Что есть сейчас
 
-При регистрации сотрудник указывает:
-- ник в D7;
-- роль;
-- TRC20-кошелёк USDT.
-
-Поддерживаемые роли:
-- `designer`
-- `smm`
-- `reviewer`
-- `project_manager`
-
-Профиль можно обновлять повторным вызовом `/register`.
-
-### 2. Ежедневные отчёты
+### 1. Legacy designer flow
 Команда: `/report`
 
-По умолчанию бот предлагает сдать отчёт за вчера.
+Что работает:
+- дизайнер сдаёт отчёт по задачам;
+- дата по умолчанию — вчера;
+- task codes валидируются;
+- дубликаты не принимаются;
+- админам приходит отчёт с оплатой;
+- есть история, дашборды и аналитика;
+- работает Google Sheets export.
 
-#### Для дизайнеров / SMM / проджектов
-Формат ввода — построчно:
-```text
-OTHER-1234 12.50
-PERU1-5678 8.00
-V-1001 5.00
-```
+### 2. Legacy reviewer flow
+Команда: `/report`
 
-Поддерживаемые префиксы задач:
-- GEO: `OTHER`, `PERU1`, `PERU2`, `ITALY`, `ARG`, `CHILE`
-- Visual: `V`
+Старый reviewer flow всё ещё сохранён для совместимости.
 
-Бот:
-- валидирует формат;
-- не принимает дубликаты за ту же дату;
-- считает сумму;
-- отправляет уведомление администраторам.
+### 3. Reviewer v2
+Команда: `/report_reviews_v2`
 
-#### Для отзовиков (`reviewer`)
-Отчёт сдаётся отдельным сценарием:
-- GEO;
-- количество отзывов;
-- цена за 1 отзыв;
-- подтверждение итога.
+Новый flow для reviewer:
+- multi-line report;
+- typed items;
+- поддержка типов:
+  - `small`
+  - `large`
+  - `custom`
+- отдельные quantity / unit_price / total;
+- финальный комментарий к отчёту.
 
-### 3. Профиль и история задач
-Команды:
-- `/me` — профиль сотрудника;
-- `/myreports` — задачи за 7 / 14 / 30 дней;
-- `/cancel` — отмена текущего сценария.
+### 4. PM verification for reviewer v2
+PM / admin команды:
+- `/pm_review_queue`
+- `/pm_review_verify <entry_id>`
+- `/pm_review_reject <entry_id> [comment]`
 
-### 4. Администрирование
-Команды:
-- `/addadmin <telegram_id>` — добавить администратора;
-- `/listdesigners [role]` — список сотрудников, опционально по роли;
-- `/adminreport [YYYY-MM-DD]` — отчёт за день;
-- `/pendingpayments` — ожидающие оплаты;
-- `/employeehistory <telegram_id>` — история выплат сотрудника;
-- `/dashboard` — сводный дашборд;
-- `/missedreports` — кто не сдал отчёт за вчера;
-- `/paidtoday` — выплачено сегодня;
-- `/paidweek` — выплачено за 7 дней;
-- `/analyticsday` — аналитика за сегодня;
-- `/analyticsweek` — аналитика за 7 дней;
-- `/analyticsmonth` — аналитика за 30 дней;
-- `/analyticsfrom YYYY-MM-DD YYYY-MM-DD` — аналитика за произвольный период.
+Что работает:
+- очередь pending reviewer entries;
+- verify;
+- reject.
 
-### 5. PM / SMM skeleton
-Начальный PM-only flow для новой SMM-модели:
-- `/pm_smm_assign <employee_id> <channel_name> <geo> <daily_rate>` — создать assignment для SMM;
-- `/pm_smm_assignments` — посмотреть активные assignment'ы;
-- `/pm_smm_report` — внести daily entry за SMM через пошаговый flow;
-- `/pm_smm_weekly` — weekly payroll preview по всем SMM за прошлую неделю;
-- `/pm_smm_weekly_employee <employee_id>` — детализация по одному SMM за прошлую неделю;
-- `/pm_smm_batch_create` — создать weekly payout batch'и по прошлой неделе;
-- `/pm_smm_batches` — посмотреть pending SMM weekly batch'и;
-- `/pm_smm_batch_paid <batch_id>` — отметить weekly batch как оплаченный;
-- `/pm_smm_batch_history` — посмотреть историю SMM batch'ей.
+### 5. Reviewer payout batches
+PM / admin команды:
+- `/pm_review_batch_create`
+- `/pm_review_batches`
+- `/pm_review_batch_paid <batch_id>`
+- `/pm_review_batch_history`
 
-> Это переходный skeleton под новую бизнес-логику. Текущий designer flow продолжает работать отдельно.
+Что работает:
+- verified reviewer entries переходят в payout batches;
+- pending batch list;
+- mark as paid;
+- history.
 
-Также администраторам доступна inline-панель `🛠 Админка` с разделами:
-- Dashboard;
-- Сотрудники;
-- Выплаты;
-- Аналитика;
-- Отчёты.
+### 6. SMM / PM flow
+PM / admin команды:
+- `/pm_smm_assign <employee_id> <channel_name> <geo> <daily_rate>`
+- `/pm_smm_assignments`
+- `/pm_smm_report`
+- `/pm_smm_weekly`
+- `/pm_smm_weekly_employee <employee_id>`
+- `/pm_smm_batch_create`
+- `/pm_smm_batches`
+- `/pm_smm_batch_paid <batch_id>`
+- `/pm_smm_batch_history`
 
-### 5. Оплаты
-После отправки отчёта администраторы получают сообщение с кнопками:
-- `✅ Оплачено`
-- `⏳ Не оплачено`
+Что работает:
+- assignment management;
+- PM-only SMM daily entries;
+- weekly payroll preview;
+- batch creation;
+- mark as paid;
+- history.
 
-При оплате:
-- обновляется статус в БД;
-- сотруднику отправляется уведомление;
-- при включённой интеграции обновляется Google Sheets.
+### 7. Admin / reporting
+Сохранены legacy admin команды:
+- `/addadmin <telegram_id>`
+- `/listdesigners [role]`
+- `/adminreport [YYYY-MM-DD]`
+- `/pendingpayments`
+- `/employeehistory <telegram_id>`
+- `/dashboard`
+- `/missedreports`
+- `/paidtoday`
+- `/paidweek`
+- `/analyticsday`
+- `/analyticsweek`
+- `/analyticsmonth`
+- `/analyticsfrom YYYY-MM-DD YYYY-MM-DD`
 
-При статусе `Не оплачено`:
-- админ вводит комментарий;
-- сотруднику уходит причина;
-- комментарий записывается в БД и Sheets.
+Также есть inline admin hub `🛠 Админка`.
 
-### 6. Планировщик
-В проекте есть 3 плановых сценария:
-- ежедневная админ-сводка в `REPORT_HOUR_UTC`;
-- 08:00 МСК — напоминание сотрудникам сдать отчёт за вчера;
-- 12:00 МСК — уведомление администраторам, кто не сдал отчёт.
+## Бизнес-модель, которая уже отражена в коде
 
-### 7. Google Sheets
-Если заданы `GOOGLE_SHEET_ID` и `GOOGLE_SERVICE_ACCOUNT_JSON`, бот:
-- синхронизирует лист `designers`;
-- дописывает отчёты в лист `reports`;
-- обновляет статус оплаты в `reports`.
+### Designers
+- self-report;
+- daily report;
+- piecework;
+- immediate payment.
+
+### Reviewers
+- новый typed report flow v2;
+- PM verification;
+- payout batches.
+
+### SMM
+- self-report не используется;
+- daily entries вносит PM;
+- assignments + daily rates;
+- weekly payout batches.
+
+### Product manager
+- operational role;
+- ведёт SMM entries;
+- верифицирует reviewer entries.
 
 ## Стек
 - Рекомендуемо: Python 3.11+
-- Минимально протестировано локально: Python 3.9.6
+- Локально протестировано: Python 3.9.6
 - aiogram 3
 - aiosqlite
 - APScheduler
@@ -138,6 +143,10 @@ V-1001 5.00
 ├── README.md
 ├── CHANGES.md
 ├── README_UPDATE.md
+├── tests/
+│   ├── test_db_smoke.py
+│   ├── test_nextgen_flows.py
+│   └── test_report_parsing.py
 └── d7_bot/
     ├── __init__.py
     ├── bot.py
@@ -150,8 +159,10 @@ V-1001 5.00
         ├── __init__.py
         ├── admin.py
         ├── common.py
+        ├── pm.py
         ├── register.py
-        └── report.py
+        ├── report.py
+        └── reviewer_v2.py
 ```
 
 ## Конфигурация
@@ -179,7 +190,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Если на машине пока есть только системный Python 3.9:
+Fallback для текущей машины:
 
 ```bash
 python3 -m venv .venv
@@ -188,36 +199,39 @@ pip install -r requirements.txt
 python main.py
 ```
 
-> Для стабильного dev/prod baseline лучше перейти на Python 3.11+.
-
 ## Smoke tests
-Минимальный baseline-тест набор запускается стандартным `unittest`:
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Если используете локальный venv:
+Запуск:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Что сейчас покрыто:
-- парсинг task codes;
-- базовый smoke по БД;
-- дедупликация задач;
-- выборка сотрудников по роли.
+Что покрыто сейчас:
+- task parsing;
+- legacy DB smoke;
+- SMM assignment / daily entry / weekly batch flow;
+- reviewer v2 verify / payout batch flow.
 
-## Деплой
-Минимально для старта нужен только:
-- `BOT_TOKEN` или `TELEGRAM_BOT_TOKEN`
+## Текущее состояние
 
-Рекомендуемо также задать:
-- `ADMIN_IDS`
-- `DB_PATH`
-- `REPORT_HOUR_UTC`
+### Уже сделано
+- стабилизирован legacy designer/report/admin слой;
+- выровнена Moscow date logic в ключевых местах;
+- исправлен scheduler Sheets duplication bug;
+- добавлена next-gen domain model;
+- собран SMM weekly cycle;
+- собран reviewer v2 cycle;
+- добавлен smoke baseline для next-gen flows.
 
-Для Google Sheets дополнительно:
-- `GOOGLE_SHEET_ID`
-- `GOOGLE_SERVICE_ACCOUNT_JSON`
+### Ещё не завершено
+- reviewer v2 ещё не встроен в основной `/report` flow;
+- нет web admin panel;
+- нет полноценного service/API слоя;
+- README отражает текущее состояние, но проект всё ещё transition-phase.
+
+## Следующие логичные шаги
+1. Перевести reviewer v2 из optional flow в основной flow для reviewer.
+2. Добавить уведомления сотрудникам по новым batch flows.
+3. Выделить service layer поверх `db.py`.
+4. Подготовить web admin panel groundwork.
+5. Добавить больше тестов на business rules и edge cases.
