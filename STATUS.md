@@ -18,10 +18,10 @@
 5. Нет расширенного тестового покрытия на edge cases / business policies.
 
 ## Следующий рекомендуемый этап
-1. Consolidate reviewer v2 into main reviewer experience.
-2. Add user-facing notifications for new payout batch flows.
-3. Introduce service layer for payroll/reviewer/smm domains.
-4. Start web admin panel groundwork.
+1. Add user-facing notifications for new payout batch flows.
+2. Introduce service layer for payroll/reviewer/smm domains.
+3. Start web admin panel groundwork.
+4. Reduce legacy reviewer flow after confidence period.
 
 ## Риск
 Если дальше просто наращивать handlers без service layer, проект снова быстро уйдёт в спутанную бизнес-логику.

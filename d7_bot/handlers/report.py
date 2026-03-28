@@ -14,6 +14,7 @@ from aiogram.types import CallbackQuery, Message
 
 from d7_bot.config import Config
 from d7_bot.db import Database, ReviewerEntry, TaskEntry, moscow_today
+from d7_bot.handlers.reviewer_v2 import ReviewerV2States
 from d7_bot.keyboards import date_keyboard, main_menu_keyboard, payment_keyboard
 from d7_bot.sheets import GoogleSheetsExporter
 
@@ -133,10 +134,23 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
         return
 
     yesterday = (moscow_today() - timedelta(days=1)).isoformat()
+
+    if designer.role == "reviewer":
+        await state.clear()
+        await state.set_state(ReviewerV2States.choose_date)
+        await state.update_data(items=[])
+        await message.answer(
+            "🧾 <b>Reviewer report v2</b>\n\n"
+            "Новый основной flow для отзовиков уже включён.\n"
+            f"Отправь дату отчёта в формате <code>YYYY-MM-DD</code>.\n"
+            f"Обычно это вчера: <code>{yesterday}</code>\n\n"
+            "Если нужен старый flow: <code>/report_reviews_legacy</code>"
+        )
+        return
+
     await state.set_state(ReportStates.choose_date)
-    title = "📝 <b>Сдать отчёт по отзывам</b>" if designer.role == "reviewer" else "📝 <b>Сдать отчёт по задачам</b>"
     await message.answer(
-        f"{title}\n\n"
+        "📝 <b>Сдать отчёт по задачам</b>\n\n"
         "Обычно вы сдаёте отчёт <b>за вчера</b> — выберите нужную дату:\n\n"
         f"📅 Вчера: <b>{yesterday}</b>",
         reply_markup=date_keyboard(),
@@ -379,6 +393,28 @@ async def step_tasks(
         len(accepted),
         len(duplicates),
         len(errors),
+    )
+
+
+@router.message(Command("report_reviews_legacy"))
+async def cmd_report_reviews_legacy(message: Message, state: FSMContext, db: Database) -> None:
+    user = message.from_user
+    if not user:
+        return
+
+    designer = await db.get_designer(user.id)
+    if not designer or designer.role != "reviewer":
+        await message.answer("⛔ Legacy reviewer flow доступен только отзовикам.")
+        return
+
+    yesterday = (moscow_today() - timedelta(days=1)).isoformat()
+    await state.clear()
+    await state.set_state(ReportStates.choose_date)
+    await message.answer(
+        "📝 <b>Legacy reviewer flow</b>\n\n"
+        "Обычно вы сдаёте отчёт за вчера — выберите нужную дату:\n\n"
+        f"📅 Вчера: <b>{yesterday}</b>",
+        reply_markup=date_keyboard(),
     )
 
 

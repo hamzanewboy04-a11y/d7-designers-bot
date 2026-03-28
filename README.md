@@ -21,13 +21,18 @@ Telegram-бот и evolving internal ops/payroll system для команды D7
 - есть история, дашборды и аналитика;
 - работает Google Sheets export.
 
-### 2. Legacy reviewer flow
+### 2. Reviewer main flow
 Команда: `/report`
 
-Старый reviewer flow всё ещё сохранён для совместимости.
+Для роли `reviewer` основной `/report` теперь ведёт в reviewer v2 flow.
+
+Legacy fallback сохранён отдельно:
+- `/report_reviews_legacy`
 
 ### 3. Reviewer v2
-Команда: `/report_reviews_v2`
+Команды:
+- `/report`
+- `/report_reviews_v2`
 
 Новый flow для reviewer:
 - multi-line report;
