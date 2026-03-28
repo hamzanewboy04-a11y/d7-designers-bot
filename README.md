@@ -227,6 +227,10 @@ python main.py
 - `runtime.txt`
 - `railway.json`
 
+Важно:
+- в `railway.json` больше нет жёсткого `startCommand`;
+- для multi-service deployment команду запуска нужно задавать в Railway отдельно для каждого сервиса.
+
 Bot service команда запуска:
 ```bash
 python main.py
@@ -234,7 +238,7 @@ python main.py
 
 Web admin MVP запускается отдельно:
 ```bash
-uvicorn web.app:app --host 0.0.0.0 --port ${PORT:-8000}
+uvicorn web.app:app --host 0.0.0.0 --port $PORT
 ```
 
 Минимальные env для Railway:
