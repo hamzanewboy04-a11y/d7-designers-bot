@@ -8,10 +8,9 @@ from collections.abc import Iterable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+# Postgres cutover is currently focused on next-gen domain tables only.
+# Legacy SQLite tables (designers/admins/reports) are intentionally excluded.
 TABLES = [
-    "designers",
-    "admins",
-    "reports",
     "employees",
     "review_rate_rules",
     "review_entries",
@@ -53,13 +52,34 @@ async def import_table(conn, sqlite_path: str, table: str) -> int:
     if not rows:
         return 0
 
-    quoted_columns = ", ".join(f'"{c}"' for c in columns)
-    placeholders = ", ".join(f":{c}" for c in columns)
+    # Align SQLite source columns to current Postgres destination schema.
+    result = await conn.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = :table
+            ORDER BY ordinal_position
+            """
+        ),
+        {"table": table},
+    )
+    dest_columns = [row[0] for row in result.fetchall()]
+    common_columns = [c for c in columns if c in dest_columns]
+    if not common_columns:
+        return 0
+
+    quoted_columns = ", ".join(f'"{c}"' for c in common_columns)
+    placeholders = ", ".join(f":{c}" for c in common_columns)
     stmt = text(f'INSERT INTO "{table}" ({quoted_columns}) VALUES ({placeholders})')
 
-    payload = [dict(zip(columns, row)) for row in rows]
+    payload = []
+    for row in rows:
+        raw = dict(zip(columns, row))
+        payload.append({key: raw[key] for key in common_columns})
+
     await conn.execute(stmt, payload)
-    return len(rows)
+    return len(payload)
 
 
 async def postgres_count(conn, table: str) -> int:

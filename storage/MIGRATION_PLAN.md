@@ -22,7 +22,12 @@ python scripts/sqlite_to_postgres_import.py \
   --truncate
 ```
 
+Current scope:
+- imports next-gen domain tables only
+- excludes legacy SQLite tables (`designers`, `admins`, `reports`)
+- aligns source columns to current Postgres schema automatically
+
 Expected use:
 - run after Alembic schema migration
 - verify printed row counts
-- then switch Railway services to `DATABASE_URL`
+- then switch web read paths to `DATABASE_URL`
