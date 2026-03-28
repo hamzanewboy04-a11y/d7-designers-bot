@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -17,26 +17,52 @@ from services.smm import SmmService
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="D7 Admin")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 config = load_config()
 db = Database(config.db_path)
+_db_ready = False
+_db_error: str | None = None
+
+
+async def ensure_db() -> tuple[bool, str | None]:
+    global _db_ready, _db_error
+    if _db_ready:
+        return True, None
+    try:
+        await db.init()
+        _db_ready = True
+        _db_error = None
+        return True, None
+    except Exception as exc:
+        _db_error = str(exc)
+        logger.error("Web DB init failed: %s", exc)
+        return False, _db_error
 
 
 @app.on_event("startup")
 async def startup() -> None:
-    await db.init()
+    ok, err = await ensure_db()
+    if ok:
+        logger.info("Web admin DB init complete.")
+    else:
+        logger.warning("Web admin started in degraded mode (db unavailable): %s", err)
 
 
 @app.get("/healthz", response_class=PlainTextResponse)
 async def healthz() -> str:
-    return "ok"
+    ok, _ = await ensure_db()
+    return "ok" if ok else "degraded"
 
 
 @app.get("/admin", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    ok, err = await ensure_db()
+    if not ok:
+        return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
     payroll = PayrollService(db)
     employees = EmployeeService(db)
     stats = await payroll.dashboard_stats()
@@ -49,6 +75,9 @@ async def dashboard(request: Request):
 
 @app.get("/admin/employees", response_class=HTMLResponse)
 async def employees_page(request: Request):
+    ok, err = await ensure_db()
+    if not ok:
+        return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
     service = EmployeeService(db)
     employees = await service.list_active()
     return TEMPLATES.TemplateResponse(
@@ -59,6 +88,9 @@ async def employees_page(request: Request):
 
 @app.get("/admin/smm/assignments", response_class=HTMLResponse)
 async def smm_assignments_page(request: Request):
+    ok, err = await ensure_db()
+    if not ok:
+        return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
     service = SmmService(db)
     assignments = await service.list_assignments()
     return TEMPLATES.TemplateResponse(
@@ -69,6 +101,9 @@ async def smm_assignments_page(request: Request):
 
 @app.get("/admin/reviewer/entries", response_class=HTMLResponse)
 async def reviewer_entries_page(request: Request):
+    ok, err = await ensure_db()
+    if not ok:
+        return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
     service = ReviewerService(db)
     entries = await service.pending_entries()
     return TEMPLATES.TemplateResponse(
@@ -79,6 +114,9 @@ async def reviewer_entries_page(request: Request):
 
 @app.get("/admin/payouts", response_class=HTMLResponse)
 async def payouts_page(request: Request):
+    ok, err = await ensure_db()
+    if not ok:
+        return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
     reviewer = ReviewerService(db)
     smm = SmmService(db)
     return TEMPLATES.TemplateResponse(
