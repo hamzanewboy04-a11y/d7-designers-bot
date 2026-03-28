@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar"><div><h2>Payouts</h2><div class="subtitle">Pending reviewer и SMM batch'и</div></div></div>
+<div class="section">
+  <h3>Pending Reviewer Batches</h3>
+  <table>
+    <thead><tr><th>Batch ID</th><th>Employee</th><th>Date</th><th>Items</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for item in reviewer_batches %}
+      <tr>
+        <td><code>{{ item.batch_id }}</code></td>
+        <td>{{ item.display_name }}</td>
+        <td>{{ item.period_start }}</td>
+        <td>{{ item.item_count }}</td>
+        <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="section">
+  <h3>Pending SMM Batches</h3>
+  <table>
+    <thead><tr><th>Batch ID</th><th>Employee</th><th>Period</th><th>Items</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for item in smm_batches %}
+      <tr>
+        <td><code>{{ item.batch_id }}</code></td>
+        <td>{{ item.display_name }}</td>
+        <td>{{ item.period_start }} — {{ item.period_end }}</td>
+        <td>{{ item.item_count }}</td>
+        <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

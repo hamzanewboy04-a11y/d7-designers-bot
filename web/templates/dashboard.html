@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h2>Dashboard</h2>
+    <div class="subtitle">Обзор сотрудников, очередей и batch'ей</div>
+  </div>
+</div>
+<div class="cards">
+  <div class="card"><div class="label">Employees</div><div class="value">{{ stats.employee_total }}</div></div>
+  <div class="card"><div class="label">Pending reviewer entries</div><div class="value">{{ stats.pending_review_entries }}</div></div>
+  <div class="card"><div class="label">Pending reviewer batches</div><div class="value">{{ stats.pending_reviewer_batches }}</div></div>
+  <div class="card"><div class="label">Pending SMM batches</div><div class="value">{{ stats.pending_smm_batches }}</div></div>
+</div>
+<div class="section">
+  <h3>Сотрудники по ролям</h3>
+  <table>
+    <thead><tr><th>Роль</th><th>Количество</th></tr></thead>
+    <tbody>
+      {% for item in role_counts %}
+      <tr><td>{{ item.role }}</td><td>{{ item.count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

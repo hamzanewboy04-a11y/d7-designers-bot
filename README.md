@@ -227,9 +227,14 @@ python main.py
 - `runtime.txt`
 - `railway.json`
 
-Команда запуска:
+Bot service команда запуска:
 ```bash
 python main.py
+```
+
+Web admin MVP запускается отдельно:
+```bash
+uvicorn web.app:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
 Минимальные env для Railway:

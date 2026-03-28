@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title or 'D7 Admin' }}</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>D7 Admin</h1>
+      <nav>
+        <a href="/admin">Dashboard</a>
+        <a href="/admin/employees">Employees</a>
+        <a href="/admin/smm/assignments">SMM Assignments</a>
+        <a href="/admin/reviewer/entries">Reviewer Entries</a>
+        <a href="/admin/payouts">Payouts</a>
+      </nav>
+    </aside>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

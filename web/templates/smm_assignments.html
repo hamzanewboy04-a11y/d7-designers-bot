@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar"><div><h2>SMM Assignments</h2><div class="subtitle">Активные assignments по SMM</div></div></div>
+<table>
+  <thead><tr><th>Assignment ID</th><th>SMM</th><th>Channel</th><th>Geo</th><th>Rate</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for item in assignments %}
+    <tr>
+      <td><code>{{ item.assignment.id }}</code></td>
+      <td>{{ item.employee.display_name }}</td>
+      <td>{{ item.assignment.channel_name }}</td>
+      <td>{{ item.assignment.geo or '—' }}</td>
+      <td>{{ '%.2f'|format(item.assignment.daily_rate_usdt) }} USDT</td>
+      <td><span class="badge">{{ item.assignment.status }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

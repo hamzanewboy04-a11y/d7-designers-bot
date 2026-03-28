@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar"><div><h2>Reviewer Entries</h2><div class="subtitle">Pending reviewer v2 queue</div></div></div>
+<table>
+  <thead><tr><th>Entry ID</th><th>Reviewer</th><th>Date</th><th>Lines</th><th>Total</th></tr></thead>
+  <tbody>
+    {% for item in entries %}
+    <tr>
+      <td><code>{{ item.review_entry_id }}</code></td>
+      <td>{{ item.display_name }}</td>
+      <td>{{ item.report_date }}</td>
+      <td>{{ item.item_count }}</td>
+      <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
