@@ -277,7 +277,8 @@ uvicorn web.app:app --host 0.0.0.0 --port $PORT
 - проект всё ещё transition-phase.
 
 ## Следующие логичные шаги
-1. Перевести storage layer на PostgreSQL через `DATABASE_URL`.
-2. Подготовить importer SQLite -> PostgreSQL.
-3. После этого поднять web admin panel на общей БД.
-4. Добавить больше тестов на business rules и edge cases.
+1. Запустить Alembic schema на PostgreSQL.
+2. Прогнать importer SQLite -> PostgreSQL.
+3. Переключить bot и web на `DATABASE_URL`.
+4. После этого поднять web admin panel на общей БД.
+5. Добавить больше тестов на business rules и edge cases.
