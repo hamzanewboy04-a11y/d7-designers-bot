@@ -180,6 +180,7 @@ PM / admin команды:
 BOT_TOKEN=...
 # или TELEGRAM_BOT_TOKEN=...
 DB_PATH=d7_bot.sqlite3
+DATABASE_URL=
 ADMIN_IDS=111111111,222222222
 REPORT_HOUR_UTC=8
 
@@ -187,6 +188,8 @@ REPORT_HOUR_UTC=8
 GOOGLE_SHEET_ID=...
 GOOGLE_SERVICE_ACCOUNT_JSON={...json...}
 ```
+
+Сейчас runtime всё ещё использует SQLite `DB_PATH`, но groundwork под переход на PostgreSQL через `DATABASE_URL` уже добавлен.
 
 ## Запуск локально
 Рекомендуемый вариант:
@@ -274,7 +277,7 @@ uvicorn web.app:app --host 0.0.0.0 --port $PORT
 - проект всё ещё transition-phase.
 
 ## Следующие логичные шаги
-1. Выделить service layer поверх `db.py`.
-2. Подготовить web admin panel groundwork.
-3. Решить вопрос persistent storage для Railway / production.
+1. Перевести storage layer на PostgreSQL через `DATABASE_URL`.
+2. Подготовить importer SQLite -> PostgreSQL.
+3. После этого поднять web admin panel на общей БД.
 4. Добавить больше тестов на business rules и edge cases.

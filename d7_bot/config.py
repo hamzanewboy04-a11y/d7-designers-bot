@@ -12,6 +12,7 @@ load_dotenv()
 class Config:
     bot_token: str
     db_path: str
+    database_url: str | None
     admin_ids: list[int]
     report_hour_utc: int
     google_sheet_id: str | None
@@ -39,6 +40,7 @@ def load_config() -> Config:
     return Config(
         bot_token=token,
         db_path=os.getenv("DB_PATH", "d7_bot.sqlite3"),
+        database_url=os.getenv("DATABASE_URL"),
         admin_ids=admin_ids,
         report_hour_utc=int(os.getenv("REPORT_HOUR_UTC", "8")),
         google_sheet_id=os.getenv("GOOGLE_SHEET_ID"),
