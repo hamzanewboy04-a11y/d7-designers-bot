@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from d7_bot.db import Employee
 from storage.models import EmployeeModel
@@ -15,32 +15,25 @@ class PostgresEmployeeReadRepository:
             result = await session.execute(
                 select(EmployeeModel)
                 .where(EmployeeModel.is_active.is_(True))
-                .order_by(func.lower(EmployeeModel.display_name), EmployeeModel.id)
+                .order_by(EmployeeModel.display_name)
             )
-            employees = result.scalars().all()
-            return [self._to_employee(model) for model in employees]
-
-    async def role_counts(self) -> list[dict]:
-        async with self.session_factory() as session:
-            result = await session.execute(
-                select(EmployeeModel.role, func.count(EmployeeModel.id))
-                .where(EmployeeModel.is_active.is_(True))
-                .group_by(EmployeeModel.role)
-                .order_by(EmployeeModel.role)
-            )
+            rows = result.scalars().all()
             return [
-                {"role": role or "", "count": int(count)}
-                for role, count in result.all()
+                Employee(
+                    id=row.id,
+                    telegram_id=row.telegram_id,
+                    username=row.username,
+                    display_name=row.display_name,
+                    role=row.role,
+                    wallet=row.wallet,
+                    is_active=bool(row.is_active),
+                )
+                for row in rows
             ]
 
-    @staticmethod
-    def _to_employee(model: EmployeeModel) -> Employee:
-        return Employee(
-            id=int(model.id),
-            telegram_id=model.telegram_id,
-            username=model.username,
-            display_name=model.display_name,
-            role=model.role or "",
-            wallet=model.wallet or "",
-            is_active=bool(model.is_active),
-        )
+    async def role_counts(self) -> list[dict]:
+        employees = await self.list_active()
+        counts: dict[str, int] = {}
+        for employee in employees:
+            counts[employee.role] = counts.get(employee.role, 0) + 1
+        return [{"role": role, "count": count} for role, count in sorted(counts.items())]

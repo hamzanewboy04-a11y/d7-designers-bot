@@ -11,29 +11,43 @@ class PostgresDashboardReadRepository:
 
     async def dashboard_stats(self) -> dict:
         async with self.session_factory() as session:
-            employee_total = await session.scalar(
-                select(func.count(EmployeeModel.id)).where(EmployeeModel.is_active.is_(True))
+            employee_total = int(
+                (
+                    await session.execute(
+                        select(func.count()).select_from(EmployeeModel).where(EmployeeModel.is_active.is_(True))
+                    )
+                ).scalar_one()
             )
-            pending_review_entries = await session.scalar(
-                select(func.count(ReviewEntryModel.id)).where(ReviewEntryModel.status == "submitted")
+            pending_review_entries = int(
+                (
+                    await session.execute(
+                        select(func.count()).select_from(ReviewEntryModel).where(ReviewEntryModel.status == "submitted")
+                    )
+                ).scalar_one()
             )
-            pending_reviewer_batches = await session.scalar(
-                select(func.count(PaymentBatchModel.id)).where(
-                    PaymentBatchModel.source_type == "reviewer",
-                    PaymentBatchModel.payout_mode == "immediate",
-                    PaymentBatchModel.status == "pending",
-                )
+            pending_reviewer_batches = int(
+                (
+                    await session.execute(
+                        select(func.count()).select_from(PaymentBatchModel).where(
+                            PaymentBatchModel.source_type == "reviewer",
+                            PaymentBatchModel.status == "pending",
+                        )
+                    )
+                ).scalar_one()
             )
-            pending_smm_batches = await session.scalar(
-                select(func.count(PaymentBatchModel.id)).where(
-                    PaymentBatchModel.source_type == "smm",
-                    PaymentBatchModel.payout_mode == "weekly",
-                    PaymentBatchModel.status == "pending",
-                )
+            pending_smm_batches = int(
+                (
+                    await session.execute(
+                        select(func.count()).select_from(PaymentBatchModel).where(
+                            PaymentBatchModel.source_type == "smm",
+                            PaymentBatchModel.status == "pending",
+                        )
+                    )
+                ).scalar_one()
             )
             return {
-                "employee_total": int(employee_total or 0),
-                "pending_review_entries": int(pending_review_entries or 0),
-                "pending_reviewer_batches": int(pending_reviewer_batches or 0),
-                "pending_smm_batches": int(pending_smm_batches or 0),
+                "employee_total": employee_total,
+                "pending_review_entries": pending_review_entries,
+                "pending_reviewer_batches": pending_reviewer_batches,
+                "pending_smm_batches": pending_smm_batches,
             }
