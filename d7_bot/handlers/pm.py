@@ -4,7 +4,7 @@ import html
 import logging
 from datetime import timedelta
 
-from aiogram import Router
+from aiogram import Bot, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -99,7 +99,7 @@ async def cmd_pm_review_verify(message: Message, db: Database, config: Config) -
 
 
 @router.message(Command("pm_review_reject"))
-async def cmd_pm_review_reject(message: Message, db: Database, config: Config) -> None:
+async def cmd_pm_review_reject(message: Message, db: Database, config: Config, bot: Bot) -> None:
     pm = await _check_pm(message, db, config)
     if not pm:
         return
@@ -127,6 +127,20 @@ async def cmd_pm_review_reject(message: Message, db: Database, config: Config) -
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
         + (f"\nКомментарий: <i>{html.escape(comment)}</i>" if comment else "")
     )
+
+    reviewer = await db.get_employee(result['employee_id'])
+    if reviewer and reviewer.telegram_id:
+        try:
+            await bot.send_message(
+                reviewer.telegram_id,
+                "🚫 <b>Твой reviewer-отчёт отклонён</b>\n\n"
+                f"Entry ID: <code>{result['review_entry_id']}</code>\n"
+                f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
+                + (f"Комментарий: <i>{html.escape(comment)}</i>\n" if comment else "")
+                + "\nИсправь данные и отправь отчёт заново.",
+            )
+        except Exception as exc:
+            logger.warning("Could not notify reviewer %s about reject: %s", reviewer.telegram_id, exc)
 
 
 @router.message(Command("pm_review_batch_create"))
@@ -173,7 +187,7 @@ async def cmd_pm_review_batches(message: Message, db: Database, config: Config) 
 
 
 @router.message(Command("pm_review_batch_paid"))
-async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Config) -> None:
+async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Config, bot: Bot) -> None:
     pm = await _check_pm(message, db, config)
     if not pm:
         return
@@ -198,6 +212,19 @@ async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Confi
         f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
     )
+
+    reviewer = await db.get_employee(result['employee_id'])
+    if reviewer and reviewer.telegram_id:
+        try:
+            await bot.send_message(
+                reviewer.telegram_id,
+                "💸 <b>Твоя выплата по reviewer-отчёту отправлена</b>\n\n"
+                f"Batch: <code>{result['batch_id']}</code>\n"
+                f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
+                f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>",
+            )
+        except Exception as exc:
+            logger.warning("Could not notify reviewer %s about paid batch: %s", reviewer.telegram_id, exc)
 
 
 @router.message(Command("pm_review_batch_history"))
@@ -430,7 +457,7 @@ async def cmd_pm_smm_batches(message: Message, db: Database, config: Config) -> 
 
 
 @router.message(Command("pm_smm_batch_paid"))
-async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config) -> None:
+async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config, bot: Bot) -> None:
     pm = await _check_pm(message, db, config)
     if not pm:
         return
@@ -455,6 +482,19 @@ async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config) 
         f"Период: <code>{html.escape(result['period_start'])}</code> — <code>{html.escape(result['period_end'])}</code>\n"
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
     )
+
+    smm_employee = await db.get_employee(result['employee_id'])
+    if smm_employee and smm_employee.telegram_id:
+        try:
+            await bot.send_message(
+                smm_employee.telegram_id,
+                "💸 <b>Твоя SMM weekly выплата отправлена</b>\n\n"
+                f"Batch: <code>{result['batch_id']}</code>\n"
+                f"Период: <code>{html.escape(result['period_start'])}</code> — <code>{html.escape(result['period_end'])}</code>\n"
+                f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>",
+            )
+        except Exception as exc:
+            logger.warning("Could not notify SMM %s about paid batch: %s", smm_employee.telegram_id, exc)
 
 
 @router.message(Command("pm_smm_batch_history"))

@@ -53,7 +53,8 @@ PM / admin команды:
 Что работает:
 - очередь pending reviewer entries;
 - verify;
-- reject.
+- reject;
+- уведомление reviewer при reject.
 
 ### 5. Reviewer payout batches
 PM / admin команды:
@@ -66,7 +67,8 @@ PM / admin команды:
 - verified reviewer entries переходят в payout batches;
 - pending batch list;
 - mark as paid;
-- history.
+- history;
+- уведомление reviewer при оплате.
 
 ### 6. SMM / PM flow
 PM / admin команды:
@@ -86,7 +88,8 @@ PM / admin команды:
 - weekly payroll preview;
 - batch creation;
 - mark as paid;
-- history.
+- history;
+- уведомление SMM при оплате.
 
 ### 7. Admin / reporting
 Сохранены legacy admin команды:
