@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
@@ -20,6 +21,31 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _sync_designers_with_retry(db: Database, sheets: GoogleSheetsExporter) -> bool:
+    designers = await db.list_designers()
+    attempts = 3
+    delays = [1, 3]
+    for attempt in range(1, attempts + 1):
+        try:
+            await sheets.sync_designers(designers)
+            logger.info("Sheets: initial sync complete (%d designers)", len(designers))
+            return True
+        except Exception as exc:
+            if attempt >= attempts:
+                logger.error("Sheets: initial sync failed after %d attempts (bot will continue): %s", attempt, exc)
+                return False
+            delay = delays[min(attempt - 1, len(delays) - 1)]
+            logger.warning(
+                "Sheets: initial sync attempt %d/%d failed: %s. Retrying in %ss...",
+                attempt,
+                attempts,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+    return False
+
+
 async def main() -> None:
     config = load_config()
 
@@ -36,13 +62,7 @@ async def main() -> None:
     sheets = GoogleSheetsExporter(config.google_sheet_id, config.google_service_account_json)
     if sheets.is_enabled:
         logger.info("Google Sheets integration enabled (sheet_id=%s)", config.google_sheet_id)
-        # Sync designers on startup to keep the sheet up-to-date
-        try:
-            designers = await db.list_designers()
-            await sheets.sync_designers(designers)
-            logger.info("Sheets: initial sync complete (%d designers)", len(designers))
-        except Exception as exc:
-            logger.error("Sheets: initial sync failed (bot will continue): %s", exc)
+        await _sync_designers_with_retry(db, sheets)
     else:
         logger.info("Google Sheets integration disabled.")
 
