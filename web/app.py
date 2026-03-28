@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
 
 from d7_bot.config import load_config
 from d7_bot.db import Database
@@ -14,6 +15,8 @@ from services.employees import EmployeeService
 from services.payroll import PayrollService
 from services.reviewer import ReviewerService
 from services.smm import SmmService
+from storage.repositories import PostgresDashboardReadRepository, PostgresEmployeeReadRepository
+from storage.session import create_session_factory
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -26,6 +29,11 @@ config = load_config()
 db = Database(config.db_path)
 _db_ready = False
 _db_error: str | None = None
+_pg_engine = None
+_pg_session_factory = None
+
+if config.database_url:
+    _pg_engine, _pg_session_factory = create_session_factory(config.database_url)
 
 
 async def ensure_db() -> tuple[bool, str | None]:
@@ -33,7 +41,11 @@ async def ensure_db() -> tuple[bool, str | None]:
     if _db_ready:
         return True, None
     try:
-        await db.init()
+        if _pg_session_factory is not None:
+            async with _pg_session_factory() as session:
+                await session.execute(text("SELECT 1"))
+        else:
+            await db.init()
         _db_ready = True
         _db_error = None
         return True, None
@@ -52,6 +64,12 @@ async def startup() -> None:
         logger.warning("Web admin started in degraded mode (db unavailable): %s", err)
 
 
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    if _pg_engine is not None:
+        await _pg_engine.dispose()
+
+
 @app.get("/healthz", response_class=PlainTextResponse)
 async def healthz() -> str:
     ok, _ = await ensure_db()
@@ -63,8 +81,14 @@ async def dashboard(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    payroll = PayrollService(db)
-    employees = EmployeeService(db)
+
+    if _pg_session_factory is not None:
+        payroll = PayrollService(PostgresDashboardReadRepository(_pg_session_factory))
+        employees = EmployeeService(PostgresEmployeeReadRepository(_pg_session_factory))
+    else:
+        payroll = PayrollService(db)
+        employees = EmployeeService(db)
+
     stats = await payroll.dashboard_stats()
     role_counts = await employees.role_counts()
     return TEMPLATES.TemplateResponse(
@@ -78,7 +102,12 @@ async def employees_page(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    service = EmployeeService(db)
+
+    if _pg_session_factory is not None:
+        service = EmployeeService(PostgresEmployeeReadRepository(_pg_session_factory))
+    else:
+        service = EmployeeService(db)
+
     employees = await service.list_active()
     return TEMPLATES.TemplateResponse(
         "employees.html",
