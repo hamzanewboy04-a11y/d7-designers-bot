@@ -1110,6 +1110,155 @@ class Database:
             summary['status'] = 'rejected'
             return summary
 
+    async def create_reviewer_payout_batches(self) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT re.id, re.employee_id, e.display_name, re.report_date,
+                       COALESCE(SUM(ri.total_usdt), 0.0) AS total_usdt
+                FROM review_entries re
+                JOIN employees e ON e.id = re.employee_id
+                LEFT JOIN review_entry_items ri ON ri.review_entry_id = re.id
+                WHERE re.status = 'verified'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM payment_batch_items pbi
+                      JOIN payment_batches pb ON pb.id = pbi.batch_id
+                      WHERE pbi.source_table = 'review_entries'
+                        AND pbi.source_entry_id = re.id
+                        AND pb.status IN ('pending', 'paid')
+                  )
+                GROUP BY re.id, re.employee_id, e.display_name, re.report_date
+                HAVING total_usdt > 0
+                ORDER BY re.report_date ASC, e.display_name COLLATE NOCASE
+                """
+            )
+            rows = await cursor.fetchall()
+            created: list[dict] = []
+            for review_entry_id, employee_id, display_name, report_date, total_usdt in rows:
+                batch_cursor = await db.execute(
+                    """
+                    INSERT INTO payment_batches
+                        (employee_id, payout_mode, source_type, period_start, period_end, total_usdt, status)
+                    VALUES (?, 'immediate', 'reviewer', ?, ?, ?, 'pending')
+                    """,
+                    (employee_id, report_date, report_date, float(total_usdt)),
+                )
+                batch_id = int(batch_cursor.lastrowid)
+                await db.execute(
+                    """
+                    INSERT INTO payment_batch_items
+                        (batch_id, source_table, source_entry_id, amount_usdt)
+                    VALUES (?, 'review_entries', ?, ?)
+                    """,
+                    (batch_id, int(review_entry_id), float(total_usdt)),
+                )
+                created.append(
+                    {
+                        'batch_id': batch_id,
+                        'employee_id': int(employee_id),
+                        'display_name': display_name,
+                        'report_date': report_date,
+                        'total_usdt': float(total_usdt),
+                        'review_entry_id': int(review_entry_id),
+                    }
+                )
+            await db.commit()
+            return created
+
+    async def list_pending_reviewer_batches(self) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end,
+                       pb.total_usdt, COUNT(pbi.id) AS item_count
+                FROM payment_batches pb
+                JOIN employees e ON e.id = pb.employee_id
+                LEFT JOIN payment_batch_items pbi ON pbi.batch_id = pb.id
+                WHERE pb.source_type = 'reviewer' AND pb.payout_mode = 'immediate' AND pb.status = 'pending'
+                GROUP BY pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end, pb.total_usdt
+                ORDER BY pb.created_at DESC, e.display_name COLLATE NOCASE
+                """
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'batch_id': int(row[0]),
+                    'employee_id': int(row[1]),
+                    'display_name': row[2],
+                    'period_start': row[3],
+                    'period_end': row[4],
+                    'total_usdt': float(row[5]),
+                    'item_count': int(row[6]),
+                }
+                for row in rows
+            ]
+
+    async def mark_reviewer_batch_paid(self, batch_id: int, paid_by_employee_id: int) -> dict | None:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end, pb.total_usdt, pb.status
+                FROM payment_batches pb
+                JOIN employees e ON e.id = pb.employee_id
+                WHERE pb.id = ? AND pb.source_type = 'reviewer' AND pb.payout_mode = 'immediate'
+                LIMIT 1
+                """,
+                (batch_id,),
+            )
+            row = await cursor.fetchone()
+            if not row or row[6] != 'pending':
+                return None
+            await db.execute(
+                """
+                UPDATE payment_batches
+                SET status = 'paid', paid_at = ?, paid_by = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (utc_now_iso(), paid_by_employee_id, batch_id),
+            )
+            await db.commit()
+            return {
+                'batch_id': int(row[0]),
+                'employee_id': int(row[1]),
+                'display_name': row[2],
+                'period_start': row[3],
+                'period_end': row[4],
+                'total_usdt': float(row[5]),
+            }
+
+    async def list_recent_reviewer_batches(self, limit: int = 15) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end,
+                       pb.total_usdt, pb.status, pb.paid_at, COUNT(pbi.id) AS item_count
+                FROM payment_batches pb
+                JOIN employees e ON e.id = pb.employee_id
+                LEFT JOIN payment_batch_items pbi ON pbi.batch_id = pb.id
+                WHERE pb.source_type = 'reviewer' AND pb.payout_mode = 'immediate'
+                GROUP BY pb.id, pb.employee_id, e.display_name, pb.period_start, pb.period_end, pb.total_usdt, pb.status, pb.paid_at
+                ORDER BY COALESCE(pb.paid_at, pb.created_at) DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'batch_id': int(row[0]),
+                    'employee_id': int(row[1]),
+                    'display_name': row[2],
+                    'period_start': row[3],
+                    'period_end': row[4],
+                    'total_usdt': float(row[5]),
+                    'status': row[6],
+                    'paid_at': row[7],
+                    'item_count': int(row[8]),
+                }
+                for row in rows
+            ]
+
     # ── Designers ──────────────────────────────────────────────────────────
 
     async def upsert_designer(self, designer: Designer) -> None:

@@ -129,6 +129,99 @@ async def cmd_pm_review_reject(message: Message, db: Database, config: Config) -
     )
 
 
+@router.message(Command("pm_review_batch_create"))
+async def cmd_pm_review_batch_create(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    created = await db.create_reviewer_payout_batches()
+    if not created:
+        await message.answer("ℹ️ Нет новых verified reviewer entries для batch creation.")
+        return
+
+    total = sum(item['total_usdt'] for item in created)
+    lines = ["🧾 <b>Reviewer payout batches created</b>", f"💰 Итого: <b>{total:.2f} USDT</b>", ""]
+    for item in created:
+        lines.append(
+            f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>"
+            f" | entry <code>{item['review_entry_id']}</code> | {item['total_usdt']:.2f} USDT"
+        )
+    lines.append("\nПосмотреть pending batch'и: <code>/pm_review_batches</code>")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("pm_review_batches"))
+async def cmd_pm_review_batches(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    rows = await db.list_pending_reviewer_batches()
+    if not rows:
+        await message.answer("ℹ️ Pending reviewer batch'ей пока нет.")
+        return
+
+    lines = ["📦 <b>Pending reviewer batches</b>", ""]
+    for item in rows:
+        lines.append(
+            f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
+            f"  {html.escape(item['period_start'])} | {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>"
+        )
+    lines.append("\nОплатить: <code>/pm_review_batch_paid &lt;batch_id&gt;</code>")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("pm_review_batch_paid"))
+async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    args = (message.text or '').split(maxsplit=1)
+    if len(args) < 2 or not args[1].strip().isdigit():
+        await message.answer(
+            "Использование: <code>/pm_review_batch_paid &lt;batch_id&gt;</code>\n"
+            "Пример: <code>/pm_review_batch_paid 11</code>"
+        )
+        return
+
+    result = await db.mark_reviewer_batch_paid(int(args[1].strip()), pm.id)
+    if not result:
+        await message.answer("❌ Pending reviewer batch не найден или уже закрыт.")
+        return
+
+    await message.answer(
+        "✅ <b>Reviewer batch отмечен как paid</b>\n\n"
+        f"Batch: <code>{result['batch_id']}</code>\n"
+        f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
+        f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+    )
+
+
+@router.message(Command("pm_review_batch_history"))
+async def cmd_pm_review_batch_history(message: Message, db: Database, config: Config) -> None:
+    pm = await _check_pm(message, db, config)
+    if not pm:
+        return
+
+    rows = await db.list_recent_reviewer_batches(limit=15)
+    if not rows:
+        await message.answer("ℹ️ Reviewer batch history пока пустая.")
+        return
+
+    lines = ["🧾 <b>Reviewer batch history</b>", ""]
+    for item in rows:
+        status_icon = '✅' if item['status'] == 'paid' else '⏳'
+        paid_at = f" | paid at {html.escape(str(item['paid_at']))[:10]}" if item['paid_at'] else ''
+        lines.append(
+            f"{status_icon} batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
+            f"  {html.escape(item['period_start'])} | {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>{paid_at}"
+        )
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("pm_smm_assign"))
 async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> None:
     pm = await _check_pm(message, db, config)
