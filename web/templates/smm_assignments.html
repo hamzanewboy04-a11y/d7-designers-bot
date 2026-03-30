@@ -1,19 +1,65 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="topbar"><div><h2>SMM Assignments</h2><div class="subtitle">Активные assignments по SMM</div></div></div>
-<table>
-  <thead><tr><th>Assignment ID</th><th>SMM</th><th>Channel</th><th>Geo</th><th>Rate</th><th>Status</th></tr></thead>
-  <tbody>
-    {% for item in assignments %}
-    <tr>
-      <td><code>{{ item.assignment.id }}</code></td>
-      <td>{{ item.employee.display_name }}</td>
-      <td>{{ item.assignment.channel_name }}</td>
-      <td>{{ item.assignment.geo or '—' }}</td>
-      <td>{{ '%.2f'|format(item.assignment.daily_rate_usdt) }} USDT</td>
-      <td><span class="badge">{{ item.assignment.status }}</span></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+
+{% if message %}
+<div class="flash">{{ message }}</div>
+{% endif %}
+
+<div class="grid two">
+  <div class="section">
+    <h3>Create assignment</h3>
+    <form method="post" action="/admin/smm/assignments">
+      <label for="smm_employee_id">SMM employee</label>
+      <select id="smm_employee_id" name="smm_employee_id" required>
+        <option value="">Select employee</option>
+        {% for employee in smm_employees %}
+        <option value="{{ employee.id }}">{{ employee.display_name }} ({{ employee.id }})</option>
+        {% endfor %}
+      </select>
+
+      <label for="channel_name">Channel name</label>
+      <input id="channel_name" name="channel_name" type="text" required placeholder="PeruNews" />
+
+      <label for="geo">Geo</label>
+      <input id="geo" name="geo" type="text" placeholder="PERU" />
+
+      <label for="daily_rate_usdt">Daily rate (USDT)</label>
+      <input id="daily_rate_usdt" name="daily_rate_usdt" type="number" min="0" step="0.01" required />
+
+      <label for="active_from">Active from</label>
+      <input id="active_from" name="active_from" type="date" />
+
+      <label for="comment">Comment</label>
+      <textarea id="comment" name="comment" rows="3" placeholder="Optional"></textarea>
+
+      <button class="button success" type="submit">Create assignment</button>
+    </form>
+  </div>
+
+  <div class="section">
+    <h3>Notes</h3>
+    <p class="subtitle">Assignments define active SMM work items with daily payout rate. They are used later for PM-entered daily entries and weekly payout batches.</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Active assignments</h3>
+  <table>
+    <thead><tr><th>Assignment ID</th><th>SMM</th><th>Channel</th><th>Geo</th><th>Rate</th><th>Active from</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for item in assignments %}
+      <tr>
+        <td><code>{{ item.assignment.id }}</code></td>
+        <td>{{ item.employee.display_name }}</td>
+        <td>{{ item.assignment.channel_name }}</td>
+        <td>{{ item.assignment.geo or '—' }}</td>
+        <td>{{ '%.2f'|format(item.assignment.daily_rate_usdt) }} USDT</td>
+        <td>{{ item.assignment.active_from or '—' }}</td>
+        <td><span class="badge">{{ item.assignment.status }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

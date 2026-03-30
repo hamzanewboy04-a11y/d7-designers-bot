@@ -155,16 +155,48 @@ async def employees_page(request: Request):
 
 
 @app.get("/admin/smm/assignments", response_class=HTMLResponse)
-async def smm_assignments_page(request: Request):
+async def smm_assignments_page(request: Request, message: str | None = None):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
     service = SmmService(PostgresSmmReadRepository(_pg_session_factory)) if _pg_session_factory is not None else SmmService(db)
+    employee_service = EmployeeService(PostgresEmployeeReadRepository(_pg_session_factory)) if _pg_session_factory is not None else EmployeeService(db)
     assignments = await service.list_assignments()
+    smm_employees = [employee for employee in await employee_service.list_active() if employee.role == "smm"]
     return TEMPLATES.TemplateResponse(
         "smm_assignments.html",
-        {"request": request, "title": "SMM Assignments", "assignments": assignments},
+        {
+            "request": request,
+            "title": "SMM Assignments",
+            "assignments": assignments,
+            "smm_employees": smm_employees,
+            "message": message,
+        },
     )
+
+
+@app.post("/admin/smm/assignments")
+async def smm_assignment_create(
+    smm_employee_id: int = Form(...),
+    channel_name: str = Form(...),
+    geo: str = Form(default=""),
+    daily_rate_usdt: float = Form(...),
+    active_from: str = Form(default=""),
+    comment: str = Form(default=""),
+):
+    ok, _ = await ensure_db()
+    if not ok:
+        return HTMLResponse("DB unavailable", status_code=503)
+    service = smm_domain_service()
+    await service.add_smm_assignment(
+        smm_employee_id=smm_employee_id,
+        channel_name=channel_name.strip(),
+        geo=geo.strip().upper(),
+        daily_rate_usdt=daily_rate_usdt,
+        active_from=active_from.strip() or None,
+        comment=comment.strip(),
+    )
+    return RedirectResponse(url="/admin/smm/assignments?message=Assignment created.", status_code=303)
 
 
 @app.get("/admin/reviewer/entries", response_class=HTMLResponse)
