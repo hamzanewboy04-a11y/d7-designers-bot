@@ -18,15 +18,24 @@
 5. Нет расширенного тестового покрытия на edge cases / business policies.
 
 ## Следующий рекомендуемый этап
-1. Stabilize production deploy conventions and smoke-check key flows.
-2. Complete storage cutover so bot + web share one source of truth.
-3. Introduce real service/repository boundaries for payroll/reviewer/smm domains.
-4. Continue web admin groundwork only after storage path is clarified.
-5. Reduce legacy reviewer flow after confidence period.
+1. Stabilize mixed-mode runtime and validate reviewer/SMM PostgreSQL-backed bot flows in production.
+2. Keep legacy designer/admin/task layer frozen as compatibility layer unless a full migration is explicitly chosen.
+3. Continue web admin groundwork on top of the newer shared domain storage.
+4. Expand regression coverage and operational notes.
 
 ## Обновление 2026-03-30
 Production deploy был восстановлен после серии fixes в SQLite -> PostgreSQL import path и Railway runtime command.
-Сейчас главный незавершённый риск — bot runtime всё ещё в основном опирается на SQLite, тогда как PostgreSQL path уже частично введён.
+После этого были выполнены следующие шаги:
+- web read-path переведён на PostgreSQL repositories для текущих admin views;
+- reviewer bot domain получил PostgreSQL-backed adapter/service path;
+- SMM bot domain получил PostgreSQL-backed adapter/service path;
+- добавлены regression tests для reviewer и SMM domain services;
+- зафиксирована стратегия не мигрировать legacy designer/admin/task слой преждевременно.
+
+## Текущее состояние архитектуры
+- Reviewer и SMM next-gen flows движутся в сторону PostgreSQL-backed runtime.
+- Web admin current reads уже опираются на PostgreSQL path при наличии `DATABASE_URL`.
+- Legacy designer/admin/task flow остаётся контролируемым SQLite compatibility layer.
 
 ## Риск
-Если дальше просто наращивать handlers без service layer и без завершения storage cutover, проект снова быстро уйдёт в спутанную бизнес-логику и рассинхрон данных.
+Главный риск теперь не аварийный deploy, а mixed-mode complexity: часть проекта уже modernized, а legacy слой ещё живёт отдельно. Это управляемо, если не смешивать новые фичи с преждевременной миграцией legacy.

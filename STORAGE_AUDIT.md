@@ -41,11 +41,13 @@ The main unfinished architecture task is to complete storage cutover so bot + we
 - part of web read flow
 
 ## Main risk
-Bot and web can diverge in storage backend:
-- web may read PostgreSQL
-- bot still writes SQLite
+The project is now in a managed mixed-mode state:
+- web current read paths use PostgreSQL when available
+- reviewer bot domain can use PostgreSQL
+- SMM bot domain can use PostgreSQL
+- legacy designer/admin/task flow still uses SQLite
 
-That creates inconsistent operator visibility and future data drift.
+The remaining risk is no longer "nothing uses PostgreSQL", but rather long-term complexity if the legacy island is migrated partially or inconsistently.
 
 ## Recommended cutover sequence
 
@@ -78,4 +80,7 @@ Decide one of:
 - keep importer as historical migration tool only
 
 ## Immediate actionable next task
-Implement PostgreSQL repositories for reviewer + smm read paths so the entire web admin can consistently read from PostgreSQL.
+Validate and stabilize the new mixed-mode runtime:
+- reviewer bot domain on PostgreSQL-backed adapter
+- SMM bot domain on PostgreSQL-backed adapter
+- legacy designer/admin/task layer intentionally isolated on SQLite until a final migration decision is made

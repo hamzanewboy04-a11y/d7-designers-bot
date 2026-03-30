@@ -75,8 +75,11 @@ Goal: bot + web must use one shared source of truth in production.
 2. Audit SQLite-vs-Postgres runtime usage
 3. Complete web read-path PostgreSQL usage
 4. Produce a bot storage cutover design
-5. Implement first safe Postgres-backed bot path
-6. Add tests for that path
+5. Implement PostgreSQL-backed reviewer bot path
+6. Add reviewer-domain regression tests
+7. Implement PostgreSQL-backed SMM bot path
+8. Add SMM-domain regression tests
+9. Freeze legacy designer/admin/task layer as a documented SQLite compatibility island
 
 ## Guardrails
 - Do not run importer on every service start in production.
