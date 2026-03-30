@@ -55,6 +55,24 @@ async def truncate_tables(conn, tables: Iterable[str]) -> None:
         await conn.execute(text(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE'))
 
 
+def _coerce_value(value, data_type: str):
+    if value is None:
+        return None
+    normalized = (data_type or "").lower()
+    if normalized == "boolean":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"1", "true", "t", "yes", "y", "on"}:
+                return True
+            if lowered in {"0", "false", "f", "no", "n", "off"}:
+                return False
+    return value
+
+
 async def import_table(conn, sqlite_path: str, table: str) -> int:
     columns, rows = fetch_rows(sqlite_path, table)
     if not rows:
@@ -64,7 +82,7 @@ async def import_table(conn, sqlite_path: str, table: str) -> int:
     result = await conn.execute(
         text(
             """
-            SELECT column_name
+            SELECT column_name, data_type
             FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name = :table
             ORDER BY ordinal_position
@@ -72,7 +90,8 @@ async def import_table(conn, sqlite_path: str, table: str) -> int:
         ),
         {"table": table},
     )
-    dest_columns = [row[0] for row in result.fetchall()]
+    dest_column_types = {row[0]: row[1] for row in result.fetchall()}
+    dest_columns = list(dest_column_types.keys())
     common_columns = [c for c in columns if c in dest_columns]
     if not common_columns:
         return 0
@@ -84,7 +103,12 @@ async def import_table(conn, sqlite_path: str, table: str) -> int:
     payload = []
     for row in rows:
         raw = dict(zip(columns, row))
-        payload.append({key: raw[key] for key in common_columns})
+        payload.append(
+            {
+                key: _coerce_value(raw[key], dest_column_types.get(key, ""))
+                for key in common_columns
+            }
+        )
 
     await conn.execute(stmt, payload)
     return len(payload)
