@@ -13,6 +13,7 @@ from aiogram.types import Message
 from d7_bot.config import Config
 from d7_bot.db import Database, ReviewEntryItem, moscow_today
 from d7_bot.keyboards import main_menu_keyboard
+from services.reviewer_domain import ReviewerDomainService
 
 logger = logging.getLogger(__name__)
 router = Router(name="reviewer_v2")
@@ -28,11 +29,12 @@ class ReviewerV2States(StatesGroup):
     final_comment = State()
 
 
-async def _get_reviewer(message: Message, db: Database):
+async def _get_reviewer(message: Message, db: Database, reviewer_domain: ReviewerDomainService | None = None):
     user = message.from_user
     if not user:
         return None
-    employee = await db.get_employee_by_telegram_id(user.id)
+    backend = reviewer_domain or db
+    employee = await backend.get_employee_by_telegram_id(user.id)
     if not employee or employee.role != "reviewer" or not employee.is_active:
         await message.answer("⛔ Новый reviewer flow доступен только активным отзовикам.")
         return None
@@ -40,8 +42,13 @@ async def _get_reviewer(message: Message, db: Database):
 
 
 @router.message(Command("report_reviews_v2"))
-async def cmd_report_reviews_v2(message: Message, state: FSMContext, db: Database) -> None:
-    reviewer = await _get_reviewer(message, db)
+async def cmd_report_reviews_v2(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    reviewer = await _get_reviewer(message, db, reviewer_domain)
     if not reviewer:
         return
 
@@ -57,8 +64,13 @@ async def cmd_report_reviews_v2(message: Message, state: FSMContext, db: Databas
 
 
 @router.message(ReviewerV2States.choose_date)
-async def step_choose_date(message: Message, state: FSMContext, db: Database) -> None:
-    reviewer = await _get_reviewer(message, db)
+async def step_choose_date(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    reviewer = await _get_reviewer(message, db, reviewer_domain)
     if not reviewer:
         await state.clear()
         return
@@ -70,7 +82,8 @@ async def step_choose_date(message: Message, state: FSMContext, db: Database) ->
         await message.answer("❌ Неверный формат даты. Используй <code>YYYY-MM-DD</code>.")
         return
 
-    rules = await db.list_review_rate_rules()
+    backend = reviewer_domain or db
+    rules = await backend.list_review_rate_rules()
     lines = [f"📅 Дата отчёта: <b>{html.escape(parsed.isoformat())}</b>", "", "Выбери тип отзыва:"]
     for rule in rules:
         lines.append(
@@ -82,9 +95,15 @@ async def step_choose_date(message: Message, state: FSMContext, db: Database) ->
 
 
 @router.message(ReviewerV2States.choose_type)
-async def step_choose_type(message: Message, state: FSMContext, db: Database) -> None:
+async def step_choose_type(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
     review_type = (message.text or "").strip().lower()
-    rules = await db.list_review_rate_rules()
+    backend = reviewer_domain or db
+    rules = await backend.list_review_rate_rules()
     valid_types = {rule['review_type']: rule for rule in rules}
     if review_type not in valid_types:
         await message.answer("❌ Неизвестный тип. Используй один из типов из списка.")
@@ -172,8 +191,14 @@ async def step_confirm_more(message: Message, state: FSMContext) -> None:
 
 
 @router.message(ReviewerV2States.final_comment)
-async def step_final_comment(message: Message, state: FSMContext, db: Database, config: Config) -> None:
-    reviewer = await _get_reviewer(message, db)
+async def step_final_comment(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    reviewer = await _get_reviewer(message, db, reviewer_domain)
     if not reviewer:
         await state.clear()
         return
@@ -198,13 +223,14 @@ async def step_final_comment(message: Message, state: FSMContext, db: Database, 
         )
         for item in items_raw
     ]
-    review_entry_id = await db.create_review_entry_v2(
+    backend = reviewer_domain or db
+    review_entry_id = await backend.create_review_entry_v2(
         employee_id=reviewer.id,
         report_date=str(data['report_date']),
         items=items,
         comment=final_comment,
     )
-    summary = await db.get_review_entry_summary(review_entry_id)
+    summary = await backend.get_review_entry_summary(review_entry_id)
     await state.clear()
 
     total_usdt = float(summary['total_usdt']) if summary else sum(item.total_usdt for item in items)
@@ -216,5 +242,8 @@ async def step_final_comment(message: Message, state: FSMContext, db: Database, 
         f"Строк: <b>{item_count}</b>\n"
         f"Сумма: <b>{total_usdt:.2f} USDT</b>\n"
         f"Entry ID: <code>{review_entry_id}</code>",
-        reply_markup=main_menu_keyboard(is_admin=await db.is_admin(message.from_user.id, config.admin_ids) if message.from_user else False),
+        reply_markup=main_menu_keyboard(
+            is_admin=await (reviewer_domain or db).is_admin(message.from_user.id, config.admin_ids)
+            if message.from_user else False
+        ),
     )

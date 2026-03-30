@@ -13,6 +13,7 @@ from aiogram.types import Message
 from d7_bot.config import Config
 from d7_bot.db import Database, Employee, moscow_today
 from d7_bot.keyboards import main_menu_keyboard
+from services.reviewer_domain import ReviewerDomainService
 
 logger = logging.getLogger(__name__)
 router = Router(name="pm")
@@ -25,13 +26,19 @@ class PmSmmEntryStates(StatesGroup):
     enter_comment = State()
 
 
-async def _check_pm(message: Message, db: Database, config: Config) -> Employee | None:
+async def _check_pm(
+    message: Message,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> Employee | None:
     user = message.from_user
     if not user:
         return None
 
-    employee = await db.get_employee_by_telegram_id(user.id)
-    is_admin = await db.is_admin(user.id, config.admin_ids)
+    identity_backend = reviewer_domain or db
+    employee = await identity_backend.get_employee_by_telegram_id(user.id)
+    is_admin = await identity_backend.is_admin(user.id, config.admin_ids)
     if not employee:
         if is_admin:
             return None
@@ -45,12 +52,18 @@ async def _check_pm(message: Message, db: Database, config: Config) -> Employee 
 
 
 @router.message(Command("pm_review_queue"))
-async def cmd_pm_review_queue(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_queue(
+    message: Message,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
-    rows = await db.list_pending_review_entries(limit=20)
+    backend = reviewer_domain or db
+    rows = await backend.list_pending_review_entries(limit=20)
     if not rows:
         await message.answer("ℹ️ Pending reviewer v2 entries нет.")
         return
@@ -70,8 +83,13 @@ async def cmd_pm_review_queue(message: Message, db: Database, config: Config) ->
 
 
 @router.message(Command("pm_review_verify"))
-async def cmd_pm_review_verify(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_verify(
+    message: Message,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
@@ -83,7 +101,8 @@ async def cmd_pm_review_verify(message: Message, db: Database, config: Config) -
         )
         return
 
-    result = await db.verify_review_entry(int(args[1].strip()), pm.id)
+    backend = reviewer_domain or db
+    result = await backend.verify_review_entry(int(args[1].strip()), pm.id)
     if not result:
         await message.answer("❌ Reviewer entry не найден или уже обработан.")
         return
@@ -99,8 +118,14 @@ async def cmd_pm_review_verify(message: Message, db: Database, config: Config) -
 
 
 @router.message(Command("pm_review_reject"))
-async def cmd_pm_review_reject(message: Message, db: Database, config: Config, bot: Bot) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_reject(
+    message: Message,
+    db: Database,
+    config: Config,
+    bot: Bot,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
@@ -114,7 +139,8 @@ async def cmd_pm_review_reject(message: Message, db: Database, config: Config, b
 
     entry_id = int(parts[1].strip())
     comment = parts[2].strip() if len(parts) > 2 else ''
-    result = await db.reject_review_entry(entry_id, pm.id, comment)
+    backend = reviewer_domain or db
+    result = await backend.reject_review_entry(entry_id, pm.id, comment)
     if not result:
         await message.answer("❌ Reviewer entry не найден или уже обработан.")
         return
@@ -128,7 +154,7 @@ async def cmd_pm_review_reject(message: Message, db: Database, config: Config, b
         + (f"\nКомментарий: <i>{html.escape(comment)}</i>" if comment else "")
     )
 
-    reviewer = await db.get_employee(result['employee_id'])
+    reviewer = await backend.get_employee(result['employee_id'])
     if reviewer and reviewer.telegram_id:
         try:
             await bot.send_message(
@@ -144,12 +170,18 @@ async def cmd_pm_review_reject(message: Message, db: Database, config: Config, b
 
 
 @router.message(Command("pm_review_batch_create"))
-async def cmd_pm_review_batch_create(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_batch_create(
+    message: Message,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
-    created = await db.create_reviewer_payout_batches()
+    backend = reviewer_domain or db
+    created = await backend.create_reviewer_payout_batches()
     if not created:
         await message.answer("ℹ️ Нет новых verified reviewer entries для batch creation.")
         return
@@ -166,12 +198,18 @@ async def cmd_pm_review_batch_create(message: Message, db: Database, config: Con
 
 
 @router.message(Command("pm_review_batches"))
-async def cmd_pm_review_batches(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_batches(
+    message: Message,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
-    rows = await db.list_pending_reviewer_batches()
+    backend = reviewer_domain or db
+    rows = await backend.list_pending_reviewer_batches()
     if not rows:
         await message.answer("ℹ️ Pending reviewer batch'ей пока нет.")
         return
@@ -187,8 +225,14 @@ async def cmd_pm_review_batches(message: Message, db: Database, config: Config) 
 
 
 @router.message(Command("pm_review_batch_paid"))
-async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Config, bot: Bot) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_batch_paid(
+    message: Message,
+    db: Database,
+    config: Config,
+    bot: Bot,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
@@ -200,7 +244,8 @@ async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Confi
         )
         return
 
-    result = await db.mark_reviewer_batch_paid(int(args[1].strip()), pm.id)
+    backend = reviewer_domain or db
+    result = await backend.mark_reviewer_batch_paid(int(args[1].strip()), pm.id)
     if not result:
         await message.answer("❌ Pending reviewer batch не найден или уже закрыт.")
         return
@@ -213,7 +258,7 @@ async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Confi
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
     )
 
-    reviewer = await db.get_employee(result['employee_id'])
+    reviewer = await backend.get_employee(result['employee_id'])
     if reviewer and reviewer.telegram_id:
         try:
             await bot.send_message(
@@ -228,12 +273,18 @@ async def cmd_pm_review_batch_paid(message: Message, db: Database, config: Confi
 
 
 @router.message(Command("pm_review_batch_history"))
-async def cmd_pm_review_batch_history(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_review_batch_history(
+    message: Message,
+    db: Database,
+    config: Config,
+    reviewer_domain: ReviewerDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, reviewer_domain)
     if not pm:
         return
 
-    rows = await db.list_recent_reviewer_batches(limit=15)
+    backend = reviewer_domain or db
+    rows = await backend.list_recent_reviewer_batches(limit=15)
     if not rows:
         await message.answer("ℹ️ Reviewer batch history пока пустая.")
         return
