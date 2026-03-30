@@ -29,6 +29,9 @@ BTN_PROFILE = "👤 Мой профиль"
 BTN_TASKS = "📋 Мои задачи"
 BTN_EDIT = "✏️ Редактировать профиль"
 BTN_HELP = "❓ Помощь"
+BTN_PM_SMM_REPORT = "📱 Внести SMM-отчёт"
+BTN_PM_REVIEW_QUEUE = "🧾 Очередь отзовиков"
+BTN_PM_PAYOUTS = "💸 Выплаты"
 
 # v8: single admin hub button
 BTN_ADMIN_HUB = "🛠 Админка"
@@ -52,16 +55,33 @@ ADMIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_HELP, BT
 # ── Reply keyboards ─────────────────────────────────────────────────────────
 
 
-def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
+def main_menu_keyboard(role: str | None = None, is_admin: bool = False) -> ReplyKeyboardMarkup:
     """Persistent reply keyboard shown at the bottom of the chat.
 
     v8: admin gets only ONE extra button — 🛠 Админка — instead of the bloated list.
     """
-    keyboard = [
-        [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
-        [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_EDIT)],
-        [KeyboardButton(text=BTN_HELP)],
-    ]
+    if role == "project_manager":
+        keyboard = [
+            [KeyboardButton(text=BTN_PM_SMM_REPORT), KeyboardButton(text=BTN_PM_REVIEW_QUEUE)],
+            [KeyboardButton(text=BTN_PM_PAYOUTS), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_EDIT), KeyboardButton(text=BTN_HELP)],
+        ]
+    elif role == "reviewer":
+        keyboard = [
+            [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_EDIT), KeyboardButton(text=BTN_HELP)],
+        ]
+    elif role == "smm":
+        keyboard = [
+            [KeyboardButton(text=BTN_PROFILE), KeyboardButton(text=BTN_EDIT)],
+            [KeyboardButton(text=BTN_HELP)],
+        ]
+    else:
+        keyboard = [
+            [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
+            [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_EDIT)],
+            [KeyboardButton(text=BTN_HELP)],
+        ]
     if is_admin:
         keyboard.append([KeyboardButton(text=BTN_ADMIN_HUB)])
     return ReplyKeyboardMarkup(

@@ -13,6 +13,9 @@ from d7_bot.keyboards import (
     BTN_ADMIN_HUB,
     BTN_EDIT,
     BTN_HELP,
+    BTN_PM_PAYOUTS,
+    BTN_PM_REVIEW_QUEUE,
+    BTN_PM_SMM_REPORT,
     BTN_PROFILE,
     BTN_REPORT,
     BTN_TASKS,
@@ -109,7 +112,7 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
             f"Если хотите понять, как всё устроено — откройте /help"
         )
 
-    await message.answer(text, reply_markup=main_menu_keyboard(is_admin=is_admin))
+    await message.answer(text, reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin))
 
 
 @router.message(Command("help"))
@@ -174,7 +177,7 @@ async def cmd_help(message: Message, db: Database, config: Config) -> None:
             "Для ручного управления используйте команды администратора и веб-панель."
         )
 
-    await message.answer(text, reply_markup=main_menu_keyboard(is_admin=is_admin))
+    await message.answer(text, reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin))
 
 
 # ── /cancel ────────────────────────────────────────────────────────────────
@@ -188,13 +191,13 @@ async def cmd_cancel(message: Message, state: FSMContext, db: Database, config: 
     if current is None:
         await message.answer(
             "ℹ️ Сейчас нечего отменять — вы не находитесь в процессе ввода данных.",
-            reply_markup=main_menu_keyboard(is_admin=is_admin),
+            reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
         )
         return
     await state.clear()
     await message.answer(
         "❌ Действие отменено.\n\nВыберите что-нибудь из меню 👇",
-        reply_markup=main_menu_keyboard(is_admin=is_admin),
+        reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
     )
 
 
@@ -213,7 +216,7 @@ async def cmd_me(message: Message, db: Database, config: Config) -> None:
         await message.answer(
             "❌ Вы ещё не зарегистрированы.\n\n"
             "Сначала заполните профиль: нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
-            reply_markup=main_menu_keyboard(is_admin=is_admin),
+            reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
         )
         return
 
@@ -238,7 +241,7 @@ async def cmd_me(message: Message, db: Database, config: Config) -> None:
         f"• <b>📋 Мои задачи</b> — чтобы посмотреть последние записи\n"
         f"• <b>✏️ Редактировать профиль</b> — если нужно обновить роль или кошелёк"
         f"{admin_badge}",
-        reply_markup=main_menu_keyboard(is_admin=is_admin),
+        reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
     )
 
 
@@ -257,7 +260,7 @@ async def cmd_myreports(message: Message, db: Database, config: Config) -> None:
         await message.answer(
             "❌ Вы ещё не зарегистрированы.\n\n"
             "Сначала заполните профиль: нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
-            reply_markup=main_menu_keyboard(is_admin=is_admin),
+            reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
         )
         return
 
@@ -298,7 +301,7 @@ async def cb_period(callback: CallbackQuery, db: Database, config: Config) -> No
         )
         await callback.message.answer(  # type: ignore[union-attr]
             "Выберите действие 👇",
-            reply_markup=main_menu_keyboard(is_admin=is_admin),
+            reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
         )
         return
 
@@ -327,7 +330,7 @@ async def cb_period(callback: CallbackQuery, db: Database, config: Config) -> No
     await callback.message.edit_text("\n".join(lines))  # type: ignore[union-attr]
     await callback.message.answer(  # type: ignore[union-attr]
         "Выберите действие 👇",
-        reply_markup=main_menu_keyboard(is_admin=is_admin),
+        reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
     )
 
 
@@ -338,6 +341,28 @@ async def cb_period(callback: CallbackQuery, db: Database, config: Config) -> No
 async def btn_report(message: Message, state: FSMContext, db: Database) -> None:
     from d7_bot.handlers.report import cmd_report
     await cmd_report(message, state, db)
+
+
+@router.message(F.text == BTN_PM_SMM_REPORT)
+async def btn_pm_smm_report(message: Message, state: FSMContext, db: Database, config: Config) -> None:
+    from d7_bot.handlers.pm import cmd_pm_smm_report
+    await cmd_pm_smm_report(message, state, db, config)
+
+
+@router.message(F.text == BTN_PM_REVIEW_QUEUE)
+async def btn_pm_review_queue(message: Message, db: Database, config: Config) -> None:
+    from d7_bot.handlers.pm import cmd_pm_review_queue
+    await cmd_pm_review_queue(message, db, config)
+
+
+@router.message(F.text == BTN_PM_PAYOUTS)
+async def btn_pm_payouts(message: Message) -> None:
+    await message.answer(
+        "💸 <b>Выплаты</b>\n\n"
+        "Для PM и админа удобнее всего работать с выплатами через веб-панель.\n"
+        "Там можно увидеть pending batch'и, историю и статусы.\n\n"
+        "Если нужен Telegram-сценарий, используйте reviewer/SMM batch-команды."
+    )
 
 
 @router.message(F.text == BTN_PROFILE)
@@ -393,5 +418,5 @@ async def fallback_handler(message: Message, state: FSMContext, db: Database, co
     await message.answer(
         "🤔 Я не понял эту команду.\n\n"
         "Воспользуйтесь кнопками меню ниже 👇",
-        reply_markup=main_menu_keyboard(is_admin=is_admin),
+        reply_markup=main_menu_keyboard(role=designer.role if designer else None, is_admin=is_admin),
     )
