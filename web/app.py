@@ -15,7 +15,12 @@ from services.employees import EmployeeService
 from services.payroll import PayrollService
 from services.reviewer import ReviewerService
 from services.smm import SmmService
-from storage.repositories import PostgresDashboardReadRepository, PostgresEmployeeReadRepository
+from storage.repositories import (
+    PostgresDashboardReadRepository,
+    PostgresEmployeeReadRepository,
+    PostgresReviewerReadRepository,
+    PostgresSmmReadRepository,
+)
 from storage.session import create_session_factory
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -120,7 +125,7 @@ async def smm_assignments_page(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    service = SmmService(db)
+    service = SmmService(PostgresSmmReadRepository(_pg_session_factory)) if _pg_session_factory is not None else SmmService(db)
     assignments = await service.list_assignments()
     return TEMPLATES.TemplateResponse(
         "smm_assignments.html",
@@ -133,7 +138,7 @@ async def reviewer_entries_page(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    service = ReviewerService(db)
+    service = ReviewerService(PostgresReviewerReadRepository(_pg_session_factory)) if _pg_session_factory is not None else ReviewerService(db)
     entries = await service.pending_entries()
     return TEMPLATES.TemplateResponse(
         "reviewer_entries.html",
@@ -146,8 +151,8 @@ async def payouts_page(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    reviewer = ReviewerService(db)
-    smm = SmmService(db)
+    reviewer = ReviewerService(PostgresReviewerReadRepository(_pg_session_factory)) if _pg_session_factory is not None else ReviewerService(db)
+    smm = SmmService(PostgresSmmReadRepository(_pg_session_factory)) if _pg_session_factory is not None else SmmService(db)
     return TEMPLATES.TemplateResponse(
         "payouts.html",
         {
