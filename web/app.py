@@ -246,7 +246,59 @@ async def employees_page(request: Request):
     return TEMPLATES.TemplateResponse(
         request=request,
         name="employees.html",
-        context={"request": request, "title": "Employees", "employees": employees, "operator_id": operator},
+        context={"request": request, "title": "Сотрудники", "employees": employees, "operator_id": operator},
+    )
+
+
+@app.get("/admin/employees/{telegram_id}", response_class=HTMLResponse)
+async def employee_detail_page(request: Request, telegram_id: int):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
+    ok, err = await ensure_db()
+    if not ok and _pg_session_factory is None:
+        return HTMLResponse(f"<h1>D7 Админка</h1><p>База недоступна</p><pre>{err}</pre>", status_code=503)
+
+    if _pg_session_factory is not None:
+        employee_service = EmployeeService(PostgresEmployeeReadRepository(_pg_session_factory))
+        employees = await employee_service.list_active()
+        employee = next((item for item in employees if item.telegram_id == telegram_id), None)
+    else:
+        employee = await db.get_employee_by_telegram_id(telegram_id)
+
+    if not employee:
+        return HTMLResponse("<h1>Сотрудник не найден</h1>", status_code=404)
+
+    payment = {"paid_usdt": 0.0, "pending_usdt": 0.0, "report_count": 0}
+    reports: list[dict] = []
+    try:
+        payment = await db.get_designer_payment_summary(telegram_id)
+        raw_reports = await db.list_designer_reports(telegram_id, limit=50)
+        reports = [
+            {
+                "report_date": row[0],
+                "task_code": row[1],
+                "cost_usdt": float(row[2]),
+                "payment_status": row[3],
+                "payment_comment": row[4] or "",
+            }
+            for row in raw_reports
+        ]
+    except Exception as exc:
+        logger.warning("Legacy designer report data unavailable for %s: %s", telegram_id, exc)
+
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="employee_detail.html",
+        context={
+            "request": request,
+            "title": f"Сотрудник {employee.display_name}",
+            "employee": employee,
+            "payment": payment,
+            "reports": reports,
+            "operator_id": operator,
+        },
     )
 
 

@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h2>Сотрудник: {{ employee.display_name }}</h2>
+    <div class="subtitle">{{ employee.role or '—' }} · Telegram ID: {{ employee.telegram_id or '—' }}</div>
+  </div>
+  <div>
+    <a class="button secondary" href="/admin/employees">← Назад к сотрудникам</a>
+  </div>
+</div>
+
+<div class="cards compact">
+  <div class="card"><div class="label">Имя</div><div class="value small">{{ employee.display_name }}</div></div>
+  <div class="card"><div class="label">Username</div><div class="value small">{{ employee.username or '—' }}</div></div>
+  <div class="card"><div class="label">Кошелёк</div><div class="value small">{{ employee.wallet or '—' }}</div></div>
+  <div class="card"><div class="label">Legacy-отчётов</div><div class="value">{{ payment.report_count }}</div></div>
+  <div class="card"><div class="label">Оплачено</div><div class="value">{{ '%.2f'|format(payment.paid_usdt) }} USDT</div></div>
+  <div class="card"><div class="label">Ожидает оплаты</div><div class="value">{{ '%.2f'|format(payment.pending_usdt) }} USDT</div></div>
+</div>
+
+<div class="section">
+  <h3>Последние legacy-отчёты</h3>
+  <table>
+    <thead><tr><th>Дата</th><th>Код задачи</th><th>Сумма</th><th>Статус оплаты</th><th>Комментарий</th></tr></thead>
+    <tbody>
+      {% for item in reports %}
+      <tr>
+        <td>{{ item.report_date }}</td>
+        <td><code>{{ item.task_code }}</code></td>
+        <td>{{ '%.2f'|format(item.cost_usdt) }} USDT</td>
+        <td>{{ item.payment_status }}</td>
+        <td>{{ item.payment_comment or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

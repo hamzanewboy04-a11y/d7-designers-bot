@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="topbar"><div><h2>Employees</h2><div class="subtitle">Активные сотрудники из next-gen модели</div></div></div>
+<div class="topbar"><div><h2>Сотрудники</h2><div class="subtitle">Активные сотрудники из next-gen модели</div></div></div>
 <table>
-  <thead><tr><th>ID</th><th>Имя</th><th>Role</th><th>Telegram ID</th><th>Username</th><th>Wallet</th></tr></thead>
+  <thead><tr><th>ID</th><th>Имя</th><th>Роль</th><th>Telegram ID</th><th>Username</th><th>Кошелёк</th><th></th></tr></thead>
   <tbody>
     {% for employee in employees %}
     <tr>
@@ -12,6 +12,11 @@
       <td>{{ employee.telegram_id or '—' }}</td>
       <td>{{ employee.username or '—' }}</td>
       <td><code>{{ employee.wallet or '—' }}</code></td>
+      <td>
+        {% if employee.telegram_id %}
+        <a class="button secondary" href="/admin/employees/{{ employee.telegram_id }}">История</a>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

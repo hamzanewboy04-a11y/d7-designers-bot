@@ -1438,6 +1438,49 @@ class Database:
                 return {"task_count": 0, "total_usdt": 0.0}
             return {"task_count": int(row[0]), "total_usdt": float(row[1])}
 
+    async def list_designer_reports(self, designer_id: int, limit: int = 50) -> list[tuple]:
+        """
+        Return recent task rows for a designer.
+        Each row: (report_date, task_code, cost_usdt, payment_status, payment_comment)
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT report_date, task_code, cost_usdt, payment_status, COALESCE(payment_comment, '')
+                FROM reports
+                WHERE designer_id = ?
+                ORDER BY report_date DESC, id DESC
+                LIMIT ?
+                """,
+                (designer_id, limit),
+            )
+            return await cursor.fetchall()
+
+    async def get_designer_payment_summary(self, designer_id: int) -> dict:
+        """
+        Return grouped payment summary for a designer across all reports.
+        """
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN cost_usdt ELSE 0 END), 0.0),
+                    COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN cost_usdt ELSE 0 END), 0.0),
+                    COUNT(*)
+                FROM reports
+                WHERE designer_id = ?
+                """,
+                (designer_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return {"paid_usdt": 0.0, "pending_usdt": 0.0, "report_count": 0}
+            return {
+                "paid_usdt": float(row[0]),
+                "pending_usdt": float(row[1]),
+                "report_count": int(row[2]),
+            }
+
     # ── Payment ────────────────────────────────────────────────────────────
 
     async def update_payment_status(
