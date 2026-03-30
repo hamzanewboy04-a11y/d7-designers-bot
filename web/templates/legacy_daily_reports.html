@@ -45,7 +45,7 @@
         <td><code>{{ item.wallet }}</code></td>
         <td><code>{{ item.task_code }}</code></td>
         <td>{{ '%.2f'|format(item.cost_usdt) }} USDT</td>
-        <td><span class="badge">{{ item.payment_status }}</span></td>
+        <td><span class="badge"><span class="badge badge-{{ item.payment_status }}">{{ item.payment_status }}</span></span></td>
         <td><a class="button secondary" href="/admin/employees/{{ item.designer_id }}">История</a></td>
       </tr>
       {% endfor %}

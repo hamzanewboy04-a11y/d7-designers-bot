@@ -9,7 +9,7 @@
       <td><code>{{ item.review_entry_id }}</code></td>
       <td>{{ item.display_name }}</td>
       <td>{{ item.report_date }}</td>
-      <td>{{ item.status }}</td>
+      <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
       <td>{{ item.created_at }}</td>
       <td>{{ item.item_count }}</td>
       <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>

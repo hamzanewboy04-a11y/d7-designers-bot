@@ -1,6 +1,30 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="topbar"><div><h2>Сотрудники</h2><div class="subtitle">Активные сотрудники из next-gen модели</div></div></div>
+
+<div class="section">
+  <form method="get" action="/admin/employees" class="grid two">
+    <div>
+      <label for="role">Роль</label>
+      <select id="role" name="role">
+        <option value="">Все</option>
+        <option value="designer" {% if role == 'designer' %}selected{% endif %}>designer</option>
+        <option value="reviewer" {% if role == 'reviewer' %}selected{% endif %}>reviewer</option>
+        <option value="smm" {% if role == 'smm' %}selected{% endif %}>smm</option>
+        <option value="project_manager" {% if role == 'project_manager' %}selected{% endif %}>project_manager</option>
+      </select>
+    </div>
+    <div>
+      <label for="q">Поиск</label>
+      <input id="q" name="q" type="text" value="{{ q or '' }}" placeholder="Имя, username или Telegram ID" />
+    </div>
+    <div>
+      <button class="button success" type="submit">Применить фильтры</button>
+    </div>
+  </form>
+</div>
+
+{% if employees %}
 <table>
   <thead><tr><th>ID</th><th>Имя</th><th>Роль</th><th>Telegram ID</th><th>Username</th><th>Кошелёк</th><th></th></tr></thead>
   <tbody>
@@ -8,7 +32,7 @@
     <tr>
       <td><code>{{ employee.id }}</code></td>
       <td>{{ employee.display_name }}</td>
-      <td>{{ employee.role }}</td>
+      <td><span class="badge badge-role">{{ employee.role }}</span></td>
       <td>{{ employee.telegram_id or '—' }}</td>
       <td>{{ employee.username or '—' }}</td>
       <td><code>{{ employee.wallet or '—' }}</code></td>
@@ -21,4 +45,9 @@
     {% endfor %}
   </tbody>
 </table>
+{% else %}
+<div class="section">
+  <p class="subtitle">По этим фильтрам сотрудники не найдены.</p>
+</div>
+{% endif %}
 {% endblock %}

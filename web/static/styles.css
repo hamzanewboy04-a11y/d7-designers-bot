@@ -31,3 +31,7 @@ a.row-link { color: inherit; text-decoration: none; }
 tr:hover td { background: #1a202b; }
 .quick-links { display: flex; flex-wrap: wrap; gap: 10px; }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #202634; color: #dbe6ff; font-size: 12px; font-weight: 600; }
+.badge-role { background: #22324f; color: #cfe2ff; }
+.badge-paid { background: #1f5134; color: #c8f5d6; }
+.badge-pending { background: #5a4717; color: #ffe7a8; }
+.badge-unpaid { background: #5b2430; color: #ffc2cf; }

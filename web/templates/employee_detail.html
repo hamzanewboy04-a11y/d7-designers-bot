@@ -29,7 +29,7 @@
         <td>{{ item.report_date }}</td>
         <td><code>{{ item.task_code }}</code></td>
         <td>{{ '%.2f'|format(item.cost_usdt) }} USDT</td>
-        <td>{{ item.payment_status }}</td>
+        <td><span class="badge badge-{{ item.payment_status }}">{{ item.payment_status }}</span></td>
         <td>{{ item.payment_comment or '—' }}</td>
       </tr>
       {% endfor %}

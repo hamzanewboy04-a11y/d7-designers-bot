@@ -3,7 +3,7 @@
 <div class="topbar">
   <div>
     <h2>Отчёт отзовика #{{ entry.review_entry_id }}</h2>
-    <div class="subtitle">{{ entry.display_name }} · {{ entry.report_date }} · {{ entry.status }}</div>
+    <div class="subtitle">{{ entry.display_name }} · {{ entry.report_date }} · <span class="badge badge-{{ entry.status }}">{{ entry.status }}</span></div>
   </div>
   <div>
     <a class="button secondary" href="/admin/reviewer/entries">← Назад к очереди</a>

@@ -229,7 +229,7 @@ async def dashboard(request: Request):
 
 
 @app.get("/admin/employees", response_class=HTMLResponse)
-async def employees_page(request: Request):
+async def employees_page(request: Request, role: str | None = None, q: str | None = None):
     operator = await require_operator(request)
     if isinstance(operator, RedirectResponse):
         return operator
@@ -244,10 +244,27 @@ async def employees_page(request: Request):
         service = EmployeeService(db)
 
     employees = await service.list_active()
+    if role:
+        employees = [employee for employee in employees if employee.role == role]
+    if q:
+        needle = q.strip().lower()
+        employees = [
+            employee for employee in employees
+            if needle in (employee.display_name or "").lower()
+            or needle in (employee.username or "").lower()
+            or needle in str(employee.telegram_id or "")
+        ]
     return TEMPLATES.TemplateResponse(
         request=request,
         name="employees.html",
-        context={"request": request, "title": "Сотрудники", "employees": employees, "operator_id": operator},
+        context={
+            "request": request,
+            "title": "Сотрудники",
+            "employees": employees,
+            "operator_id": operator,
+            "role": role,
+            "q": q,
+        },
     )
 
 
