@@ -118,9 +118,21 @@ async def dashboard(request: Request):
 
     stats = await payroll.dashboard_stats()
     role_counts = await employees.role_counts()
+    storage_mode = {
+        "reviewer": "postgres" if _pg_session_factory is not None else "sqlite",
+        "smm": "postgres" if _pg_session_factory is not None else "sqlite",
+        "legacy": "sqlite",
+        "web_reads": "postgres" if _pg_session_factory is not None else "sqlite",
+    }
     return TEMPLATES.TemplateResponse(
         "dashboard.html",
-        {"request": request, "title": "Dashboard", "stats": stats, "role_counts": role_counts},
+        {
+            "request": request,
+            "title": "Dashboard",
+            "stats": stats,
+            "role_counts": role_counts,
+            "storage_mode": storage_mode,
+        },
     )
 
 

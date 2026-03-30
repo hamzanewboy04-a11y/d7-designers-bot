@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 
-from storage.models import EmployeeModel, PaymentBatchModel, ReviewEntryModel
+from storage.models import EmployeeModel, PaymentBatchModel, ReviewEntryModel, SmmAssignmentModel
 
 
 class PostgresDashboardReadRepository:
@@ -45,9 +45,18 @@ class PostgresDashboardReadRepository:
                     )
                 ).scalar_one()
             )
+            active_smm_assignments = int(
+                (
+                    await session.execute(
+                        select(func.count()).select_from(SmmAssignmentModel).where(SmmAssignmentModel.status == "active")
+                    )
+                ).scalar_one()
+            )
             return {
                 "employee_total": employee_total,
                 "pending_review_entries": pending_review_entries,
                 "pending_reviewer_batches": pending_reviewer_batches,
                 "pending_smm_batches": pending_smm_batches,
+                "active_smm_assignments": active_smm_assignments,
+                "pending_legacy_payments": 0,
             }

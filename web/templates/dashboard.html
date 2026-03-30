@@ -3,7 +3,7 @@
 <div class="topbar">
   <div>
     <h2>Dashboard</h2>
-    <div class="subtitle">Обзор сотрудников, очередей и batch'ей</div>
+    <div class="subtitle">Обзор сотрудников, очередей и storage mode</div>
   </div>
 </div>
 <div class="cards">
@@ -11,7 +11,33 @@
   <div class="card"><div class="label">Pending reviewer entries</div><div class="value">{{ stats.pending_review_entries }}</div></div>
   <div class="card"><div class="label">Pending reviewer batches</div><div class="value">{{ stats.pending_reviewer_batches }}</div></div>
   <div class="card"><div class="label">Pending SMM batches</div><div class="value">{{ stats.pending_smm_batches }}</div></div>
+  <div class="card"><div class="label">Active SMM assignments</div><div class="value">{{ stats.active_smm_assignments }}</div></div>
+  <div class="card"><div class="label">Pending legacy payments</div><div class="value">{{ stats.pending_legacy_payments }}</div></div>
 </div>
+
+<div class="grid two">
+  <div class="section">
+    <h3>Storage mode</h3>
+    <table>
+      <tbody>
+        <tr><th>Reviewer domain</th><td>{{ storage_mode.reviewer }}</td></tr>
+        <tr><th>SMM domain</th><td>{{ storage_mode.smm }}</td></tr>
+        <tr><th>Legacy designer/admin</th><td>{{ storage_mode.legacy }}</td></tr>
+        <tr><th>Web reads</th><td>{{ storage_mode.web_reads }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="section">
+    <h3>Quick links</h3>
+    <div class="quick-links">
+      <a class="button secondary" href="/admin/reviewer/entries">Open reviewer queue</a>
+      <a class="button secondary" href="/admin/payouts">Open payouts</a>
+      <a class="button secondary" href="/admin/smm/assignments">Open SMM assignments</a>
+      <a class="button secondary" href="/admin/employees">Open employees</a>
+    </div>
+  </div>
+</div>
+
 <div class="section">
   <h3>Сотрудники по ролям</h3>
   <table>
