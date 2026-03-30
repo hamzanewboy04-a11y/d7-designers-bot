@@ -5,6 +5,7 @@ import asyncio
 import sqlite3
 import sys
 from collections.abc import Iterable
+from datetime import date, datetime, time
 from pathlib import Path
 
 from sqlalchemy import text
@@ -70,6 +71,21 @@ def _coerce_value(value, data_type: str):
                 return True
             if lowered in {"0", "false", "f", "no", "n", "off"}:
                 return False
+    if normalized in {"timestamp with time zone", "timestamp without time zone", "date", "time without time zone", "time with time zone"}:
+        if isinstance(value, (datetime, date, time)):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return None
+            if normalized == "date":
+                return date.fromisoformat(raw)
+            if normalized in {"time without time zone", "time with time zone"}:
+                return time.fromisoformat(raw)
+            try:
+                return datetime.fromisoformat(raw)
+            except ValueError:
+                return datetime.fromisoformat(raw.replace(" ", "T", 1))
     return value
 
 
