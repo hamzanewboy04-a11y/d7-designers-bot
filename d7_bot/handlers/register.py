@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, Message
 from d7_bot.db import Database, Designer
 from d7_bot.keyboards import (
     AVAILABLE_ROLES,
+    ROLE_HELP_TEXT,
     build_confirm_keyboard,
     build_role_keyboard,
     main_menu_keyboard,
@@ -74,7 +75,12 @@ async def step_nick(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Ник: <b>{nick}</b>\n\n"
         "👔 <b>Выберите вашу роль:</b>\n\n"
-        "От роли зависит, какие действия и сценарии будут доступны в боте.",
+        "От роли зависит, какие действия и сценарии будут доступны в боте.\n\n"
+        "<b>Коротко по ролям:</b>\n"
+        "• <b>Дизайнер</b> — сдаёт отчёты по задачам\n"
+        "• <b>Отзовик</b> — сдаёт отчёты по отзывам\n"
+        "• <b>SMM</b> — обычно работает через менеджера\n"
+        "• <b>Проджект-менеджер</b> — ведёт очереди, записи и выплаты",
         reply_markup=build_role_keyboard(),
     )
 
@@ -91,15 +97,21 @@ async def cb_role_select(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     role_label = _ROLE_LABELS.get(role_value, role_value)
+    role_help = ROLE_HELP_TEXT.get(role_value, "")
     await state.update_data(role=role_value)
     await callback.answer(f"Выбрано: {role_label}")
     await callback.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
     await state.set_state(RegisterStates.wallet)
-    await callback.message.answer(  # type: ignore[union-attr]
-        f"✅ Роль: <b>{role_label}</b>\n\n"
+    role_text = f"✅ Роль: <b>{role_label}</b>\n\n"
+    if role_help:
+        role_text += f"{role_help}\n\n"
+    role_text += (
         "💳 <b>Введите ваш TRC20-кошелёк USDT</b>\n\n"
         "На этот кошелёк будут ориентироваться в выплатах.\n"
         "<i>Он должен начинаться с «T» и содержать ровно 34 символа.</i>"
+    )
+    await callback.message.answer(  # type: ignore[union-attr]
+        role_text
     )
 
 
