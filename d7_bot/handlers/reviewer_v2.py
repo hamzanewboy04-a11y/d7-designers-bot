@@ -57,8 +57,8 @@ async def cmd_report_reviews_v2(
     await state.set_state(ReviewerV2States.choose_date)
     await state.update_data(items=[])
     await message.answer(
-        "🧾 <b>Reviewer report v2</b>\n\n"
-        "Это новый основной формат отчёта для отзовиков.\n\n"
+        "🧾 <b>Отчёт отзовика v2</b>\n\n"
+        "Это основной формат отчёта для отзовиков.\n\n"
         f"Сначала отправьте дату отчёта в формате <code>YYYY-MM-DD</code>.\n"
         f"Обычно это вчера: <code>{default_date}</code>\n\n"
         "После даты бот по шагам попросит:\n"
@@ -255,14 +255,14 @@ async def step_final_comment(
     item_count = int(summary['item_count']) if summary else len(items)
 
     await message.answer(
-        "✅ <b>Reviewer report v2 сохранён</b>\n\n"
+        "✅ <b>Отчёт отзовика v2 сохранён</b>\n\n"
         f"Дата: <b>{html.escape(str(data['report_date']))}</b>\n"
         f"Строк: <b>{item_count}</b>\n"
         f"Сумма: <b>{total_usdt:.2f} USDT</b>\n"
         f"Entry ID: <code>{review_entry_id}</code>\n\n"
         "<b>Что дальше:</b>\n"
         "• отчёт отправлен на проверку PM\n"
-        "• после подтверждения он попадёт в batch на выплату\n"
+        "• после подтверждения он попадёт в пачка выплат на выплату\n"
         "• если PM отклонит отчёт, понадобится исправление или комментарий",
         reply_markup=main_menu_keyboard(
             is_admin=await (reviewer_domain or db).is_admin(message.from_user.id, config.admin_ids)

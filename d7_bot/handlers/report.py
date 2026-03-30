@@ -140,8 +140,8 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
         await state.set_state(ReviewerV2States.choose_date)
         await state.update_data(items=[])
         await message.answer(
-            "🧾 <b>Reviewer report v2</b>\n\n"
-            "Новый основной flow для отзовиков уже включён.\n"
+            "🧾 <b>Отчёт отзовика v2</b>\n\n"
+            "Это основной сценарий для отзовиков.\n"
             f"Отправь дату отчёта в формате <code>YYYY-MM-DD</code>.\n"
             f"Обычно это вчера: <code>{yesterday}</code>\n\n"
             "Если нужен старый flow: <code>/report_reviews_legacy</code>"
