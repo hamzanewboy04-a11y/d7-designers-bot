@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h2>Legacy-отчёты</h2>
+    <div class="subtitle">Ожидающие оплаты и последние оплаченные отчёты дизайнеров</div>
+  </div>
+</div>
+
+<div class="grid two">
+  <div class="section">
+    <h3>Ожидают оплаты</h3>
+    <table>
+      <thead><tr><th>Designer ID</th><th>Ник</th><th>Дата</th><th>Задач</th><th>Сумма</th></tr></thead>
+      <tbody>
+        {% for item in pending %}
+        <tr>
+          <td><code>{{ item.designer_id }}</code></td>
+          <td>{{ item.d7_nick }}</td>
+          <td>{{ item.report_date }}</td>
+          <td>{{ item.task_count }}</td>
+          <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="section">
+    <h3>Недавние оплаты</h3>
+    <table>
+      <thead><tr><th>Designer ID</th><th>Ник</th><th>Дата</th><th>Задач</th><th>Сумма</th></tr></thead>
+      <tbody>
+        {% for item in recent_paid %}
+        <tr>
+          <td><code>{{ item.designer_id }}</code></td>
+          <td>{{ item.d7_nick }}</td>
+          <td>{{ item.report_date }}</td>
+          <td>{{ item.task_count }}</td>
+          <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

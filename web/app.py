@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from urllib.parse import quote
+from datetime import timedelta
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -12,7 +13,7 @@ from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from d7_bot.config import load_config
-from d7_bot.db import Database
+from d7_bot.db import Database, moscow_today
 from services.employees import EmployeeService
 from services.payroll import PayrollService
 from services.reviewer import ReviewerService
@@ -297,6 +298,54 @@ async def employee_detail_page(request: Request, telegram_id: int):
             "employee": employee,
             "payment": payment,
             "reports": reports,
+            "operator_id": operator,
+        },
+    )
+
+
+@app.get("/admin/legacy-reports", response_class=HTMLResponse)
+async def legacy_reports_page(request: Request):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
+    pending: list[dict] = []
+    recent_paid: list[dict] = []
+    try:
+        pending_rows = await db.get_pending_payments()
+        pending = [
+            {
+                "designer_id": row[0],
+                "d7_nick": row[1],
+                "wallet": row[2],
+                "report_date": row[3],
+                "task_count": int(row[4]),
+                "total_usdt": float(row[5]),
+            }
+            for row in pending_rows
+        ]
+        paid_rows = await db.get_paid_summary(moscow_today() - timedelta(days=14))
+        recent_paid = [
+            {
+                "designer_id": row[0],
+                "d7_nick": row[1],
+                "report_date": row[2],
+                "task_count": int(row[3]),
+                "total_usdt": float(row[4]),
+            }
+            for row in paid_rows[:30]
+        ]
+    except Exception as exc:
+        logger.warning("Legacy reports page data unavailable: %s", exc)
+
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="legacy_reports.html",
+        context={
+            "request": request,
+            "title": "Legacy-отчёты",
+            "pending": pending,
+            "recent_paid": recent_paid,
             "operator_id": operator,
         },
     )
