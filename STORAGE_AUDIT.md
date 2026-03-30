@@ -17,12 +17,14 @@ The main unfinished architecture task is to complete storage cutover so bot + we
 
 ### Web runtime
 `web/app.py`
-- always creates `Database(config.db_path)`
+- creates `Database(config.db_path)` as SQLite fallback
 - if `DATABASE_URL` exists, also creates SQLAlchemy session factory
-- uses PostgreSQL repositories only for some read paths:
+- now uses PostgreSQL repositories for all current read pages:
   - `PostgresDashboardReadRepository`
   - `PostgresEmployeeReadRepository`
-- still uses SQLite-backed services for reviewer/smm pages
+  - `PostgresReviewerReadRepository`
+  - `PostgresSmmReadRepository`
+- SQLite remains fallback only when PostgreSQL is unavailable / not configured
 
 ### Services still coupled to SQLite Database
 - `services/reviewer.py`

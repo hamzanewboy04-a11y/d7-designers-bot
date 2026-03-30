@@ -73,9 +73,10 @@ Goal: bot + web must use one shared source of truth in production.
 ## Immediate next execution order
 1. Create deployment/operations notes
 2. Audit SQLite-vs-Postgres runtime usage
-3. Produce a storage cutover design
-4. Implement first safe Postgres-backed bot path
-5. Add tests for that path
+3. Complete web read-path PostgreSQL usage
+4. Produce a bot storage cutover design
+5. Implement first safe Postgres-backed bot path
+6. Add tests for that path
 
 ## Guardrails
 - Do not run importer on every service start in production.
