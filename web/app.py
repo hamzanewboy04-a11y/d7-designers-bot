@@ -99,10 +99,15 @@ async def require_operator(request: Request) -> int | RedirectResponse:
     operator_id = await current_operator_id(request)
     if operator_id is None:
         return RedirectResponse(url="/admin/login?message=Please+log+in", status_code=303)
-    if not await db.is_admin(operator_id, config.admin_ids):
-        request.session.clear()
-        return RedirectResponse(url="/admin/login?message=Admin+access+required", status_code=303)
-    return operator_id
+    if operator_id in config.admin_ids:
+        return operator_id
+    try:
+        if await db.is_admin(operator_id, config.admin_ids):
+            return operator_id
+    except Exception as exc:
+        logger.warning("Admin fallback DB check failed for operator %s: %s", operator_id, exc)
+    request.session.clear()
+    return RedirectResponse(url="/admin/login?message=Admin+access+required", status_code=303)
 
 
 @app.on_event("startup")
@@ -137,13 +142,17 @@ async def login_page(request: Request, message: str | None = None):
 
 @app.post("/admin/login")
 async def login_action(request: Request, telegram_id: int = Form(...)):
-    ok, _ = await ensure_db()
-    if not ok:
-        return HTMLResponse("DB unavailable", status_code=503)
-    if not await db.is_admin(telegram_id, config.admin_ids):
-        return RedirectResponse(url="/admin/login?message=Unknown+or+unauthorized+operator", status_code=303)
-    request.session["operator_telegram_id"] = str(telegram_id)
-    return RedirectResponse(url="/admin", status_code=303)
+    if telegram_id in config.admin_ids:
+        request.session["operator_telegram_id"] = str(telegram_id)
+        return RedirectResponse(url="/admin", status_code=303)
+    try:
+        ok, _ = await ensure_db()
+        if ok and await db.is_admin(telegram_id, config.admin_ids):
+            request.session["operator_telegram_id"] = str(telegram_id)
+            return RedirectResponse(url="/admin", status_code=303)
+    except Exception as exc:
+        logger.warning("Admin login DB fallback failed for %s: %s", telegram_id, exc)
+    return RedirectResponse(url="/admin/login?message=Unknown+or+unauthorized+operator", status_code=303)
 
 
 @app.post("/admin/logout")
