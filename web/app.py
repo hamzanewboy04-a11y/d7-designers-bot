@@ -355,6 +355,13 @@ async def legacy_reports_page(request: Request):
     except Exception as exc:
         logger.warning("Legacy reports page data unavailable: %s", exc)
 
+    summary = {
+        "pending_count": len(pending),
+        "pending_total": sum(item["total_usdt"] for item in pending),
+        "recent_paid_count": len(recent_paid),
+        "recent_paid_total": sum(item["total_usdt"] for item in recent_paid),
+    }
+
     return TEMPLATES.TemplateResponse(
         request=request,
         name="legacy_reports.html",
@@ -363,6 +370,7 @@ async def legacy_reports_page(request: Request):
             "title": "Legacy-отчёты",
             "pending": pending,
             "recent_paid": recent_paid,
+            "summary": summary,
             "operator_id": operator,
         },
     )
@@ -398,6 +406,11 @@ async def legacy_daily_reports_page(
     except Exception as exc:
         logger.warning("Legacy daily reports unavailable: %s", exc)
 
+    summary = {
+        "row_count": len(rows),
+        "total_usdt": sum(item["cost_usdt"] for item in rows),
+    }
+
     return TEMPLATES.TemplateResponse(
         request=request,
         name="legacy_daily_reports.html",
@@ -407,6 +420,7 @@ async def legacy_daily_reports_page(
             "report_date": selected_date,
             "designer_id": designer_id,
             "payment_status": payment_status,
+            "summary": summary,
             "rows": rows,
             "operator_id": operator,
         },

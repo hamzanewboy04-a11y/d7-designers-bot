@@ -32,6 +32,11 @@
   </form>
 </div>
 
+<div class="cards compact">
+  <div class="card"><div class="label">Найдено строк</div><div class="value">{{ summary.row_count }}</div></div>
+  <div class="card"><div class="label">Общая сумма</div><div class="value">{{ '%.2f'|format(summary.total_usdt) }} USDT</div></div>
+</div>
+
 <div class="section">
   <h3>Результаты</h3>
   {% if rows %}
@@ -45,7 +50,7 @@
         <td><code>{{ item.wallet }}</code></td>
         <td><code>{{ item.task_code }}</code></td>
         <td>{{ '%.2f'|format(item.cost_usdt) }} USDT</td>
-        <td><span class="badge"><span class="badge badge-{{ item.payment_status }}">{{ item.payment_status }}</span></span></td>
+        <td><span class="badge badge-{{ item.payment_status }}">{{ item.payment_status }}</span></td>
         <td><a class="button secondary" href="/admin/employees/{{ item.designer_id }}">История</a></td>
       </tr>
       {% endfor %}

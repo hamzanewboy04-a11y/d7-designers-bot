@@ -7,6 +7,13 @@
   </div>
 </div>
 
+<div class="cards compact">
+  <div class="card"><div class="label">Ожидают оплаты</div><div class="value">{{ summary.pending_count }}</div></div>
+  <div class="card"><div class="label">Сумма pending</div><div class="value">{{ '%.2f'|format(summary.pending_total) }} USDT</div></div>
+  <div class="card"><div class="label">Недавних оплат</div><div class="value">{{ summary.recent_paid_count }}</div></div>
+  <div class="card"><div class="label">Сумма recent paid</div><div class="value">{{ '%.2f'|format(summary.recent_paid_total) }} USDT</div></div>
+</div>
+
 <div class="grid two">
   <div class="section">
     <h3>Ожидают оплаты</h3>
