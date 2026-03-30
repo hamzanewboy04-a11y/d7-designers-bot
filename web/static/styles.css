@@ -5,6 +5,7 @@ body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, s
 .sidebar nav { display: grid; gap: 10px; }
 .sidebar a { color: #b8c1cf; text-decoration: none; padding: 10px 12px; border-radius: 10px; }
 .sidebar a:hover { background: #202634; color: #fff; }
+.sidebar-footer { margin-top: 24px; display: grid; gap: 10px; }
 .content { padding: 32px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
 .subtitle { color: #93a0b5; margin-top: 6px; }

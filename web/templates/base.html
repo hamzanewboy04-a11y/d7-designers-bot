@@ -17,6 +17,14 @@
         <a href="/admin/reviewer/entries">Reviewer Entries</a>
         <a href="/admin/payouts">Payouts</a>
       </nav>
+      {% if operator_id %}
+      <div class="sidebar-footer">
+        <div class="subtitle">Operator: {{ operator_id }}</div>
+        <form method="post" action="/admin/logout">
+          <button class="button secondary" type="submit">Logout</button>
+        </form>
+      </div>
+      {% endif %}
     </aside>
     <main class="content">
       {% block content %}{% endblock %}

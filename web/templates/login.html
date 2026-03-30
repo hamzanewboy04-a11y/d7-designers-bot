@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h2>Operator Login</h2>
+    <div class="subtitle">Enter your Telegram ID to access admin actions</div>
+  </div>
+</div>
+
+{% if message %}
+<div class="flash">{{ message }}</div>
+{% endif %}
+
+<div class="section" style="max-width: 520px;">
+  <form method="post" action="/admin/login">
+    <label for="telegram_id">Telegram ID</label>
+    <input id="telegram_id" name="telegram_id" type="number" required placeholder="123456789" />
+
+    <button class="button success" type="submit">Login</button>
+  </form>
+</div>
+{% endblock %}

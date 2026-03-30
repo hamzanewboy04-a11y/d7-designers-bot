@@ -17,6 +17,8 @@ class Config:
     report_hour_utc: int
     google_sheet_id: str | None
     google_service_account_json: str | None
+    web_session_secret: str
+    web_enabled: bool = True
 
 
 def load_config() -> Config:
@@ -45,4 +47,6 @@ def load_config() -> Config:
         report_hour_utc=int(os.getenv("REPORT_HOUR_UTC", "8")),
         google_sheet_id=os.getenv("GOOGLE_SHEET_ID"),
         google_service_account_json=sa_json,
+        web_session_secret=os.getenv("WEB_SESSION_SECRET", "change-me-d7-web-session-secret"),
+        web_enabled=os.getenv("WEB_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
     )

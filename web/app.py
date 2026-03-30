@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
+from starlette.middleware.sessions import SessionMiddleware
 
 from d7_bot.config import load_config
 from d7_bot.db import Database
@@ -32,6 +34,7 @@ TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="D7 Admin")
+app.add_middleware(SessionMiddleware, secret_key=load_config().web_session_secret)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 config = load_config()
@@ -82,6 +85,26 @@ def smm_domain_service() -> SmmDomainService:
     return SmmDomainService(db)
 
 
+async def current_operator_id(request: Request) -> int | None:
+    value = request.session.get("operator_telegram_id")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+async def require_operator(request: Request) -> int | RedirectResponse:
+    operator_id = await current_operator_id(request)
+    if operator_id is None:
+        return RedirectResponse(url="/admin/login?message=Please+log+in", status_code=303)
+    if not await db.is_admin(operator_id, config.admin_ids):
+        request.session.clear()
+        return RedirectResponse(url="/admin/login?message=Admin+access+required", status_code=303)
+    return operator_id
+
+
 @app.on_event("startup")
 async def startup() -> None:
     ok, err = await ensure_db()
@@ -103,8 +126,37 @@ async def healthz() -> str:
     return "ok" if ok else "degraded"
 
 
+@app.get("/admin/login", response_class=HTMLResponse)
+async def login_page(request: Request, message: str | None = None):
+    return TEMPLATES.TemplateResponse(
+        "login.html",
+        {"request": request, "title": "Login", "message": message},
+    )
+
+
+@app.post("/admin/login")
+async def login_action(request: Request, telegram_id: int = Form(...)):
+    ok, _ = await ensure_db()
+    if not ok:
+        return HTMLResponse("DB unavailable", status_code=503)
+    if not await db.is_admin(telegram_id, config.admin_ids):
+        return RedirectResponse(url="/admin/login?message=Unknown+or+unauthorized+operator", status_code=303)
+    request.session["operator_telegram_id"] = str(telegram_id)
+    return RedirectResponse(url="/admin", status_code=303)
+
+
+@app.post("/admin/logout")
+async def logout_action(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/admin/login?message=Logged+out", status_code=303)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
@@ -132,12 +184,17 @@ async def dashboard(request: Request):
             "stats": stats,
             "role_counts": role_counts,
             "storage_mode": storage_mode,
+            "operator_id": operator,
         },
     )
 
 
 @app.get("/admin/employees", response_class=HTMLResponse)
 async def employees_page(request: Request):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
@@ -150,12 +207,16 @@ async def employees_page(request: Request):
     employees = await service.list_active()
     return TEMPLATES.TemplateResponse(
         "employees.html",
-        {"request": request, "title": "Employees", "employees": employees},
+        {"request": request, "title": "Employees", "employees": employees, "operator_id": operator},
     )
 
 
 @app.get("/admin/smm/assignments", response_class=HTMLResponse)
 async def smm_assignments_page(request: Request, message: str | None = None):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
@@ -171,12 +232,14 @@ async def smm_assignments_page(request: Request, message: str | None = None):
             "assignments": assignments,
             "smm_employees": smm_employees,
             "message": message,
+            "operator_id": operator,
         },
     )
 
 
 @app.post("/admin/smm/assignments")
 async def smm_assignment_create(
+    request: Request,
     smm_employee_id: int = Form(...),
     channel_name: str = Form(...),
     geo: str = Form(default=""),
@@ -184,6 +247,10 @@ async def smm_assignment_create(
     active_from: str = Form(default=""),
     comment: str = Form(default=""),
 ):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, _ = await ensure_db()
     if not ok:
         return HTMLResponse("DB unavailable", status_code=503)
@@ -201,6 +268,10 @@ async def smm_assignment_create(
 
 @app.get("/admin/reviewer/entries", response_class=HTMLResponse)
 async def reviewer_entries_page(request: Request):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
@@ -208,12 +279,16 @@ async def reviewer_entries_page(request: Request):
     entries = await service.pending_entries()
     return TEMPLATES.TemplateResponse(
         "reviewer_entries.html",
-        {"request": request, "title": "Reviewer Entries", "entries": entries},
+        {"request": request, "title": "Reviewer Entries", "entries": entries, "operator_id": operator},
     )
 
 
 @app.get("/admin/reviewer/entries/{review_entry_id}", response_class=HTMLResponse)
 async def reviewer_entry_detail_page(request: Request, review_entry_id: int, message: str | None = None):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
@@ -223,34 +298,46 @@ async def reviewer_entry_detail_page(request: Request, review_entry_id: int, mes
         return HTMLResponse("<h1>Not found</h1>", status_code=404)
     return TEMPLATES.TemplateResponse(
         "reviewer_entry_detail.html",
-        {"request": request, "title": f"Reviewer Entry {review_entry_id}", "entry": entry, "message": message},
+        {"request": request, "title": f"Reviewer Entry {review_entry_id}", "entry": entry, "message": message, "operator_id": operator},
     )
 
 
 @app.post("/admin/reviewer/entries/{review_entry_id}/verify")
-async def reviewer_entry_verify(review_entry_id: int):
+async def reviewer_entry_verify(request: Request, review_entry_id: int):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, _ = await ensure_db()
     if not ok:
         return HTMLResponse("DB unavailable", status_code=503)
     service = reviewer_domain_service()
-    result = await service.verify_review_entry(review_entry_id, 0)
+    result = await service.verify_review_entry(review_entry_id, operator)
     message = "Entry verified." if result else "Entry not found or already processed."
-    return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={message}", status_code=303)
+    return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={quote(message)}", status_code=303)
 
 
 @app.post("/admin/reviewer/entries/{review_entry_id}/reject")
-async def reviewer_entry_reject(review_entry_id: int, comment: str = Form(default="")):
+async def reviewer_entry_reject(request: Request, review_entry_id: int, comment: str = Form(default="")):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, _ = await ensure_db()
     if not ok:
         return HTMLResponse("DB unavailable", status_code=503)
     service = reviewer_domain_service()
-    result = await service.reject_review_entry(review_entry_id, 0, comment.strip())
+    result = await service.reject_review_entry(review_entry_id, operator, comment.strip())
     message = "Entry rejected." if result else "Entry not found or already processed."
-    return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={message}", status_code=303)
+    return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={quote(message)}", status_code=303)
 
 
 @app.get("/admin/payouts", response_class=HTMLResponse)
 async def payouts_page(request: Request, message: str | None = None):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
@@ -266,27 +353,36 @@ async def payouts_page(request: Request, message: str | None = None):
             "smm_batches": await smm.list_pending_smm_batches(),
             "reviewer_history": await reviewer.list_recent_reviewer_batches(limit=10),
             "smm_history": await smm.list_recent_smm_batches(limit=10),
+            "operator_id": operator,
         },
     )
 
 
 @app.post("/admin/payouts/reviewer/{batch_id}/paid")
-async def reviewer_batch_paid(batch_id: int):
+async def reviewer_batch_paid(request: Request, batch_id: int):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, _ = await ensure_db()
     if not ok:
         return HTMLResponse("DB unavailable", status_code=503)
     service = reviewer_domain_service()
-    result = await service.mark_reviewer_batch_paid(batch_id, 0)
+    result = await service.mark_reviewer_batch_paid(batch_id, operator)
     message = "Reviewer batch marked as paid." if result else "Reviewer batch not found or already closed."
-    return RedirectResponse(url=f"/admin/payouts?message={message}", status_code=303)
+    return RedirectResponse(url=f"/admin/payouts?message={quote(message)}", status_code=303)
 
 
 @app.post("/admin/payouts/smm/{batch_id}/paid")
-async def smm_batch_paid(batch_id: int):
+async def smm_batch_paid(request: Request, batch_id: int):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
     ok, _ = await ensure_db()
     if not ok:
         return HTMLResponse("DB unavailable", status_code=503)
     service = smm_domain_service()
-    result = await service.mark_smm_batch_paid(batch_id, 0)
+    result = await service.mark_smm_batch_paid(batch_id, operator)
     message = "SMM batch marked as paid." if result else "SMM batch not found or already closed."
-    return RedirectResponse(url=f"/admin/payouts?message={message}", status_code=303)
+    return RedirectResponse(url=f"/admin/payouts?message={quote(message)}", status_code=303)
