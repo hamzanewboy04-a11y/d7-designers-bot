@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.create_table(
         'employees',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column('telegram_id', sa.Integer(), nullable=True, unique=True),
+        sa.Column('telegram_id', sa.BigInteger(), nullable=True, unique=True),
         sa.Column('username', sa.String(length=255), nullable=True),
         sa.Column('display_name', sa.String(length=255), nullable=False),
         sa.Column('role', sa.String(length=64), nullable=False),
