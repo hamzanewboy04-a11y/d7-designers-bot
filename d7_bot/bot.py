@@ -14,7 +14,9 @@ from d7_bot.handlers import admin, common, pm, register, report, reviewer_v2
 from d7_bot.scheduler import setup_scheduler
 from d7_bot.sheets import GoogleSheetsExporter
 from services.reviewer_domain import ReviewerDomainService
+from services.smm_domain import SmmDomainService
 from storage.repositories.reviewer_domain import PostgresReviewerDomainRepository
+from storage.repositories.smm_domain import PostgresSmmDomainRepository
 from storage.session import create_session_factory
 
 logging.basicConfig(
@@ -62,15 +64,20 @@ async def main() -> None:
         await db.add_admin(admin_id)
 
     reviewer_domain = ReviewerDomainService(db)
+    smm_domain = SmmDomainService(db)
     if config.database_url:
         try:
             _pg_engine, _pg_session_factory = create_session_factory(config.database_url)
             reviewer_domain = ReviewerDomainService(
                 PostgresReviewerDomainRepository(_pg_session_factory, admin_fallback=db)
             )
+            smm_domain = SmmDomainService(
+                PostgresSmmDomainRepository(_pg_session_factory, admin_fallback=db)
+            )
             logger.info("Reviewer domain configured to use PostgreSQL backend.")
+            logger.info("SMM domain configured to use PostgreSQL backend.")
         except Exception as exc:
-            logger.warning("Could not initialize PostgreSQL reviewer backend, falling back to SQLite: %s", exc)
+            logger.warning("Could not initialize PostgreSQL domain backends, falling back to SQLite: %s", exc)
 
     # ── Google Sheets ──────────────────────────────────────────────────────
     sheets = GoogleSheetsExporter(config.google_sheet_id, config.google_service_account_json)
@@ -90,6 +97,7 @@ async def main() -> None:
     # Inject dependencies via workflow_data
     dp["db"] = db
     dp["reviewer_domain"] = reviewer_domain
+    dp["smm_domain"] = smm_domain
     dp["sheets"] = sheets
     dp["config"] = config
 

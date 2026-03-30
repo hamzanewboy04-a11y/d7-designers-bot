@@ -14,6 +14,7 @@ from d7_bot.config import Config
 from d7_bot.db import Database, Employee, moscow_today
 from d7_bot.keyboards import main_menu_keyboard
 from services.reviewer_domain import ReviewerDomainService
+from services.smm_domain import SmmDomainService
 
 logger = logging.getLogger(__name__)
 router = Router(name="pm")
@@ -301,8 +302,13 @@ async def cmd_pm_review_batch_history(
 
 
 @router.message(Command("pm_smm_assign"))
-async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_assign(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
@@ -319,7 +325,8 @@ async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> N
         await message.answer("❌ employee_id должен быть числом.")
         return
 
-    employee = await db.get_employee(int(employee_id_raw))
+    backend = smm_domain or db
+    employee = await backend.get_employee(int(employee_id_raw))
     if not employee or employee.role != "smm" or not employee.is_active:
         await message.answer("❌ Активный SMM сотрудник не найден.")
         return
@@ -332,7 +339,7 @@ async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> N
         await message.answer("❌ daily_rate должен быть положительным числом.")
         return
 
-    assignment_id = await db.add_smm_assignment(
+    assignment_id = await backend.add_smm_assignment(
         smm_employee_id=employee.id,
         channel_name=channel_name,
         geo=geo.upper(),
@@ -350,12 +357,18 @@ async def cmd_pm_smm_assign(message: Message, db: Database, config: Config) -> N
 
 
 @router.message(Command("pm_smm_assignments"))
-async def cmd_pm_smm_assignments(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_assignments(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
-    rows = await db.list_active_smm_assignments_detailed()
+    backend = smm_domain or db
+    rows = await backend.list_active_smm_assignments_detailed()
     if not rows:
         await message.answer("ℹ️ Активных SMM assignment'ов пока нет.")
         return
@@ -383,13 +396,19 @@ def _last_week_range() -> tuple[str, str]:
 
 
 @router.message(Command("pm_smm_weekly"))
-async def cmd_pm_smm_weekly(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_weekly(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
     period_start, period_end = _last_week_range()
-    rows = await db.get_smm_weekly_summary(period_start, period_end)
+    backend = smm_domain or db
+    rows = await backend.get_smm_weekly_summary(period_start, period_end)
     if not rows:
         await message.answer(
             f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> у SMM нет записей."
@@ -414,8 +433,13 @@ async def cmd_pm_smm_weekly(message: Message, db: Database, config: Config) -> N
 
 
 @router.message(Command("pm_smm_weekly_employee"))
-async def cmd_pm_smm_weekly_employee(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_weekly_employee(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
@@ -427,13 +451,14 @@ async def cmd_pm_smm_weekly_employee(message: Message, db: Database, config: Con
         )
         return
 
-    employee = await db.get_employee(int(args[1].strip()))
+    backend = smm_domain or db
+    employee = await backend.get_employee(int(args[1].strip()))
     if not employee or employee.role != 'smm':
         await message.answer("❌ SMM сотрудник не найден.")
         return
 
     period_start, period_end = _last_week_range()
-    rows = await db.get_smm_weekly_details(employee.id, period_start, period_end)
+    rows = await backend.get_smm_weekly_details(employee.id, period_start, period_end)
     if not rows:
         await message.answer(
             f"ℹ️ У <b>{html.escape(employee.display_name)}</b> нет записей за период <code>{period_start}</code> — <code>{period_end}</code>."
@@ -457,13 +482,19 @@ async def cmd_pm_smm_weekly_employee(message: Message, db: Database, config: Con
 
 
 @router.message(Command("pm_smm_batch_create"))
-async def cmd_pm_smm_batch_create(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_batch_create(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
     period_start, period_end = _last_week_range()
-    created = await db.create_smm_weekly_batches(period_start, period_end)
+    backend = smm_domain or db
+    created = await backend.create_smm_weekly_batches(period_start, period_end)
     if not created:
         await message.answer(
             f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> нет новых SMM записей для batch creation."
@@ -487,12 +518,18 @@ async def cmd_pm_smm_batch_create(message: Message, db: Database, config: Config
 
 
 @router.message(Command("pm_smm_batches"))
-async def cmd_pm_smm_batches(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_batches(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
-    rows = await db.list_pending_smm_batches()
+    backend = smm_domain or db
+    rows = await backend.list_pending_smm_batches()
     if not rows:
         await message.answer("ℹ️ Pending SMM weekly batch'ей пока нет.")
         return
@@ -508,8 +545,14 @@ async def cmd_pm_smm_batches(message: Message, db: Database, config: Config) -> 
 
 
 @router.message(Command("pm_smm_batch_paid"))
-async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config, bot: Bot) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_batch_paid(
+    message: Message,
+    db: Database,
+    config: Config,
+    bot: Bot,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
@@ -521,7 +564,8 @@ async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config, 
         )
         return
 
-    result = await db.mark_smm_batch_paid(int(args[1].strip()), pm.id)
+    backend = smm_domain or db
+    result = await backend.mark_smm_batch_paid(int(args[1].strip()), pm.id)
     if not result:
         await message.answer("❌ Pending SMM batch не найден или уже закрыт.")
         return
@@ -534,7 +578,7 @@ async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config, 
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
     )
 
-    smm_employee = await db.get_employee(result['employee_id'])
+    smm_employee = await backend.get_employee(result['employee_id'])
     if smm_employee and smm_employee.telegram_id:
         try:
             await bot.send_message(
@@ -549,12 +593,18 @@ async def cmd_pm_smm_batch_paid(message: Message, db: Database, config: Config, 
 
 
 @router.message(Command("pm_smm_batch_history"))
-async def cmd_pm_smm_batch_history(message: Message, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_batch_history(
+    message: Message,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
-    rows = await db.list_recent_smm_batches(limit=15)
+    backend = smm_domain or db
+    rows = await backend.list_recent_smm_batches(limit=15)
     if not rows:
         await message.answer("ℹ️ SMM batch history пока пустая.")
         return
@@ -571,12 +621,19 @@ async def cmd_pm_smm_batch_history(message: Message, db: Database, config: Confi
 
 
 @router.message(Command("pm_smm_report"))
-async def cmd_pm_smm_report(message: Message, state: FSMContext, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def cmd_pm_smm_report(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         return
 
-    smm_employees = await db.list_employees_by_role("smm")
+    backend = smm_domain or db
+    smm_employees = await backend.list_employees_by_role("smm")
     if not smm_employees:
         await message.answer("ℹ️ В системе пока нет активных SMM-сотрудников.")
         return
@@ -600,18 +657,24 @@ async def cmd_pm_smm_report(message: Message, state: FSMContext, db: Database, c
 
 
 @router.message(PmSmmEntryStates.choose_smm)
-async def step_choose_smm(message: Message, state: FSMContext, db: Database) -> None:
+async def step_choose_smm(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
     raw = (message.text or "").strip()
     if not raw.isdigit():
         await message.answer("⚠️ Отправь числовой ID сотрудника из списка.")
         return
 
-    smm_employee = await db.get_employee(int(raw))
+    backend = smm_domain or db
+    smm_employee = await backend.get_employee(int(raw))
     if not smm_employee or smm_employee.role != "smm" or not smm_employee.is_active:
         await message.answer("❌ SMM сотрудник не найден или не активен.")
         return
 
-    assignments = await db.list_active_smm_assignments(smm_employee.id)
+    assignments = await backend.list_active_smm_assignments(smm_employee.id)
     if not assignments:
         await message.answer(
             "⚠️ У этого SMM пока нет активных assignment'ов.\n"
@@ -638,7 +701,12 @@ async def step_choose_smm(message: Message, state: FSMContext, db: Database) -> 
 
 
 @router.message(PmSmmEntryStates.choose_assignment)
-async def step_choose_assignment(message: Message, state: FSMContext, db: Database) -> None:
+async def step_choose_assignment(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
     raw = (message.text or "").strip()
     data = await state.get_data()
     smm_employee_id = int(data["smm_employee_id"])
@@ -647,7 +715,8 @@ async def step_choose_assignment(message: Message, state: FSMContext, db: Databa
         await message.answer("⚠️ Отправь числовой ID assignment'а.")
         return
 
-    assignments = await db.list_active_smm_assignments(smm_employee_id)
+    backend = smm_domain or db
+    assignments = await backend.list_active_smm_assignments(smm_employee_id)
     assignment = next((a for a in assignments if a.id == int(raw)), None)
     if not assignment:
         await message.answer("❌ Assignment не найден среди активных для этого SMM.")
@@ -686,14 +755,21 @@ async def step_choose_date(message: Message, state: FSMContext) -> None:
 
 
 @router.message(PmSmmEntryStates.enter_comment)
-async def step_enter_comment(message: Message, state: FSMContext, db: Database, config: Config) -> None:
-    pm = await _check_pm(message, db, config)
+async def step_enter_comment(
+    message: Message,
+    state: FSMContext,
+    db: Database,
+    config: Config,
+    smm_domain: SmmDomainService | None = None,
+) -> None:
+    pm = await _check_pm(message, db, config, smm_domain)
     if not pm:
         await state.clear()
         return
 
     data = await state.get_data()
-    smm_employee = await db.get_employee(int(data["smm_employee_id"]))
+    backend = smm_domain or db
+    smm_employee = await backend.get_employee(int(data["smm_employee_id"]))
     if not smm_employee:
         await state.clear()
         await message.answer("❌ SMM сотрудник не найден.")
@@ -702,7 +778,7 @@ async def step_enter_comment(message: Message, state: FSMContext, db: Database, 
     comment_raw = (message.text or "").strip()
     comment = "" if comment_raw == "-" else comment_raw
 
-    entry_id = await db.add_smm_daily_entry_v2(
+    entry_id = await backend.add_smm_daily_entry_v2(
         smm_employee_id=smm_employee.id,
         entered_by_pm_id=pm.id,
         report_date=str(data["report_date"]),
@@ -722,5 +798,5 @@ async def step_enter_comment(message: Message, state: FSMContext, db: Database, 
         f"Дата: <b>{html.escape(str(data['report_date']))}</b>\n"
         f"Сумма: <b>{float(data['assignment_rate']):.2f} USDT</b>\n"
         f"Entry ID: <code>{entry_id}</code>",
-        reply_markup=main_menu_keyboard(is_admin=await db.is_admin(message.from_user.id, config.admin_ids) if message.from_user else False),
+        reply_markup=main_menu_keyboard(is_admin=await (smm_domain or db).is_admin(message.from_user.id, config.admin_ids) if message.from_user else False),
     )
