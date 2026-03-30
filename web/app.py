@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from urllib.parse import quote
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -346,6 +346,45 @@ async def legacy_reports_page(request: Request):
             "title": "Legacy-отчёты",
             "pending": pending,
             "recent_paid": recent_paid,
+            "operator_id": operator,
+        },
+    )
+
+
+@app.get("/admin/legacy-daily", response_class=HTMLResponse)
+async def legacy_daily_reports_page(request: Request, report_date: str | None = None, designer_id: int | None = None):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
+    selected_date = report_date or moscow_today().isoformat()
+    rows: list[dict] = []
+    try:
+        parsed_date = date.fromisoformat(selected_date)
+        raw_rows = await db.list_tasks_by_date_for_web(parsed_date, designer_id)
+        rows = [
+            {
+                "designer_id": row[0],
+                "d7_nick": row[1],
+                "wallet": row[2],
+                "task_code": row[3],
+                "cost_usdt": float(row[4]),
+                "payment_status": row[5],
+            }
+            for row in raw_rows
+        ]
+    except Exception as exc:
+        logger.warning("Legacy daily reports unavailable: %s", exc)
+
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="legacy_daily_reports.html",
+        context={
+            "request": request,
+            "title": "Legacy-отчёты за день",
+            "report_date": selected_date,
+            "designer_id": designer_id,
+            "rows": rows,
             "operator_id": operator,
         },
     )

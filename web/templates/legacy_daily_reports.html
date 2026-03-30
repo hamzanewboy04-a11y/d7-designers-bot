@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h2>Legacy-отчёты за день</h2>
+    <div class="subtitle">Просмотр task-отчётов по дате и дизайнеру</div>
+  </div>
+</div>
+
+<div class="section">
+  <form method="get" action="/admin/legacy-daily" class="grid two">
+    <div>
+      <label for="report_date">Дата</label>
+      <input id="report_date" name="report_date" type="date" value="{{ report_date }}" required />
+    </div>
+    <div>
+      <label for="designer_id">Designer ID</label>
+      <input id="designer_id" name="designer_id" type="number" value="{{ designer_id or '' }}" placeholder="Необязательно" />
+    </div>
+    <div>
+      <button class="button success" type="submit">Показать отчёты</button>
+    </div>
+  </form>
+</div>
+
+<div class="section">
+  <h3>Результаты</h3>
+  <table>
+    <thead><tr><th>Designer ID</th><th>Ник</th><th>Кошелёк</th><th>Task code</th><th>Сумма</th><th>Статус оплаты</th></tr></thead>
+    <tbody>
+      {% for item in rows %}
+      <tr>
+        <td><code>{{ item.designer_id }}</code></td>
+        <td>{{ item.d7_nick }}</td>
+        <td><code>{{ item.wallet }}</code></td>
+        <td><code>{{ item.task_code }}</code></td>
+        <td>{{ '%.2f'|format(item.cost_usdt) }} USDT</td>
+        <td>{{ item.payment_status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
