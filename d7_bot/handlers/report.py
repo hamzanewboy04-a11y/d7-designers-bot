@@ -151,8 +151,10 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
     await state.set_state(ReportStates.choose_date)
     await message.answer(
         "📝 <b>Сдать отчёт по задачам</b>\n\n"
-        "Обычно вы сдаёте отчёт <b>за вчера</b> — выберите нужную дату:\n\n"
-        f"📅 Вчера: <b>{yesterday}</b>",
+        "Обычно отчёт сдают <b>за вчера</b>. Сначала выберите дату, за которую хотите отправить задачи.\n\n"
+        f"📅 Вчера: <b>{yesterday}</b>\n\n"
+        "После выбора даты бот попросит вас отправить задачи строками в формате:\n"
+        "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>",
         reply_markup=date_keyboard(),
     )
 
@@ -160,7 +162,8 @@ async def cmd_report(message: Message, state: FSMContext, db: Database) -> None:
 # ── Date selection callbacks ───────────────────────────────────────────────
 
 _TASK_FORMAT_HINT = (
-    "Введите задачи в формате:\n"
+    "<b>Как отправить задачи:</b>\n"
+    "Введите каждую задачу с новой строки в формате:\n"
     "<code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n\n"
     "Каждая задача — с новой строки. Допустимые префиксы:\n"
     f"<code>{_ALLOWED_PREFIXES_DISPLAY}</code>\n\n"
@@ -168,6 +171,8 @@ _TASK_FORMAT_HINT = (
     "<code>OTHER-1234 12.50\n"
     "PERU1-5678 8.00\n"
     "V-1001 5.00</code>\n\n"
+    "<b>Что будет дальше:</b>\n"
+    "Бот проверит формат, пропустит дубликаты и покажет, что именно принято.\n\n"
     "<i>/cancel — отменить</i>"
 )
 
@@ -230,7 +235,7 @@ async def step_custom_date(message: Message, state: FSMContext, db: Database) ->
             "❌ <b>Неверный формат даты.</b>\n\n"
             "Используйте формат: <code>YYYY-MM-DD</code>\n"
             "Пример: <code>2024-01-15</code>\n\n"
-            "Попробуйте ещё раз или /cancel для отмены:"
+            "Попробуйте ещё раз или /cancel для отмены."
         )
         return
 
@@ -277,7 +282,7 @@ async def step_tasks(
     raw = (message.text or "").strip()
     if not raw:
         await message.answer(
-            "⚠️ Пустой ввод. Введите задачи или /cancel для отмены."
+            "⚠️ Пустой ввод.\n\nОтправьте хотя бы одну задачу строкой вида <code>OTHER-1234 12.50</code> или используйте /cancel."
         )
         return
 
@@ -337,13 +342,18 @@ async def step_tasks(
     if not accepted and not duplicates and not errors:
         await message.answer(
             "❌ Не удалось разобрать ни одной задачи.\n\n"
-            "Проверьте формат: <code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>"
+            "Проверьте формат: <code>КОД_ЗАДАЧИ СТОИМОСТЬ_USDT</code>\n"
+            "Пример: <code>OTHER-1234 12.50</code>"
         )
         return
 
     await state.clear()
     await message.answer(
-        "\n\n".join(parts_resp),
+        "\n\n".join(parts_resp)
+        + "\n\n<b>Что дальше:</b>\n"
+        "• если задачи приняты, они уже попали в систему\n"
+        "• если были дубликаты или ошибки, можно исправить только проблемные строки и отправить заново\n"
+        "• посмотреть себя можно через <b>📋 Мои задачи</b> и <b>👤 Мой профиль</b>",
         reply_markup=main_menu_keyboard(),
     )
 
@@ -550,4 +560,3 @@ async def reviewer_confirm_step(
             await bot.send_message(admin_id, notify_text, reply_markup=payment_keyboard(user.id, entry.report_date))
         except Exception as exc:
             logger.warning('Could not notify admin %s about reviewer report: %s', admin_id, exc)
-
