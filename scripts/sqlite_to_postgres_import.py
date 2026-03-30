@@ -3,10 +3,16 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sqlite3
+import sys
 from collections.abc import Iterable
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from storage.engine import normalize_database_url
 
