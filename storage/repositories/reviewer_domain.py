@@ -429,7 +429,7 @@ class PostgresReviewerDomainRepository:
                     PaymentBatchModel.paid_at,
                     PaymentBatchModel.created_at,
                 )
-                .order_by(func.coalesce(PaymentBatchModel.paid_at, PaymentBatchModel.created_at).desc())
+                .order_by(PaymentBatchModel.created_at.desc(), PaymentBatchModel.id.desc())
                 .limit(limit)
             )
             rows = result.all()
