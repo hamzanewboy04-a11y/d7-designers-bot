@@ -53,6 +53,7 @@ async def _sync_designers_with_retry(db: Database, sheets: GoogleSheetsExporter)
 
 async def main() -> None:
     config = load_config()
+    pg_engine = None
 
     # ── Database ───────────────────────────────────────────────────────────
     db = Database(config.db_path)
@@ -65,19 +66,31 @@ async def main() -> None:
 
     reviewer_domain = ReviewerDomainService(db)
     smm_domain = SmmDomainService(db)
+    reviewer_backend_name = "sqlite"
+    smm_backend_name = "sqlite"
     if config.database_url:
         try:
-            _pg_engine, _pg_session_factory = create_session_factory(config.database_url)
+            pg_engine, _pg_session_factory = create_session_factory(config.database_url)
             reviewer_domain = ReviewerDomainService(
                 PostgresReviewerDomainRepository(_pg_session_factory, admin_fallback=db)
             )
             smm_domain = SmmDomainService(
                 PostgresSmmDomainRepository(_pg_session_factory, admin_fallback=db)
             )
+            reviewer_backend_name = "postgres"
+            smm_backend_name = "postgres"
             logger.info("Reviewer domain configured to use PostgreSQL backend.")
             logger.info("SMM domain configured to use PostgreSQL backend.")
         except Exception as exc:
             logger.warning("Could not initialize PostgreSQL domain backends, falling back to SQLite: %s", exc)
+    else:
+        logger.info("DATABASE_URL is not configured; reviewer and SMM domains will use SQLite fallback.")
+
+    logger.info(
+        "Runtime storage mode: reviewer=%s, smm=%s, legacy_designer_admin=sqlite",
+        reviewer_backend_name,
+        smm_backend_name,
+    )
 
     # ── Google Sheets ──────────────────────────────────────────────────────
     sheets = GoogleSheetsExporter(config.google_sheet_id, config.google_service_account_json)
@@ -122,4 +135,6 @@ async def main() -> None:
     finally:
         scheduler.shutdown(wait=False)
         await bot.session.close()
+        if pg_engine is not None:
+            await pg_engine.dispose()
         logger.info("Bot stopped.")
