@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="topbar"><div><h2>Очередь отзовиков</h2><div class="subtitle">Ожидающие проверки reviewer v2 отчёты</div></div></div>
+<div class="topbar"><div><h2>Отчёты</h2><div class="subtitle">Очередь reviewer v2 и связанные разделы</div></div></div>
+
+<div class="cards compact">
+  <div class="card"><div class="label">Связанные разделы</div><div class="value small"><div class="quick-links"><a class="button secondary" href="/admin/legacy-reports">Legacy-отчёты</a><a class="button secondary" href="/admin/legacy-daily">Отчёты за день</a></div></div></div>
+</div>
+
 <table>
   <thead><tr><th>ID отчёта</th><th>Отзовик</th><th>Дата</th><th>Статус</th><th>Создан</th><th>Строк</th><th>Сумма</th><th></th></tr></thead>
   <tbody>
