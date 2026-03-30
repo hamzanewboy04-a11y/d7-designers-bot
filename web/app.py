@@ -427,6 +427,45 @@ async def legacy_daily_reports_page(
     )
 
 
+@app.get("/admin/payment-history", response_class=HTMLResponse)
+async def payment_history_page(request: Request):
+    operator = await require_operator(request)
+    if isinstance(operator, RedirectResponse):
+        return operator
+
+    legacy_paid: list[dict] = []
+    try:
+        paid_rows = await db.get_paid_summary(moscow_today() - timedelta(days=30))
+        legacy_paid = [
+            {
+                "designer_id": row[0],
+                "d7_nick": row[1],
+                "report_date": row[2],
+                "task_count": int(row[3]),
+                "total_usdt": float(row[4]),
+            }
+            for row in paid_rows[:50]
+        ]
+    except Exception as exc:
+        logger.warning("Legacy payment history unavailable: %s", exc)
+
+    reviewer = reviewer_domain_service()
+    smm = smm_domain_service()
+
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="payment_history.html",
+        context={
+            "request": request,
+            "title": "История выплат",
+            "legacy_paid": legacy_paid,
+            "reviewer_history": await reviewer.list_recent_reviewer_batches(limit=30),
+            "smm_history": await smm.list_recent_smm_batches(limit=30),
+            "operator_id": operator,
+        },
+    )
+
+
 @app.get("/admin/smm/assignments", response_class=HTMLResponse)
 async def smm_assignments_page(request: Request, message: str | None = None):
     operator = await require_operator(request)
