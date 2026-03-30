@@ -360,9 +360,16 @@ async def btn_pm_review_queue(message: Message, db: Database, config: Config) ->
 async def btn_pm_payouts(message: Message) -> None:
     await message.answer(
         "💸 <b>Выплаты</b>\n\n"
-        "Для PM и админа удобнее всего работать с выплатами через веб-панель.\n"
-        "Там можно увидеть ожидает пачка выплат'и, историю и статусы.\n\n"
-        "Если нужен Telegram-сценарий, используйте reviewer/SMM пачка выплат-команды."
+        "<b>Что можно сделать дальше:</b>\n\n"
+        "<b>Отзовики</b>\n"
+        "• <code>/pm_review_batches</code> — пачки выплат, которые ждут оплату\n"
+        "• <code>/pm_review_batch_history</code> — история выплат отзовикам\n\n"
+        "<b>SMM</b>\n"
+        "• <code>/pm_smm_batches</code> — пачки выплат SMM, которые ждут оплату\n"
+        "• <code>/pm_smm_batch_history</code> — история выплат SMM\n\n"
+        "<b>Где удобнее работать:</b>\n"
+        "Для быстрого действия можно использовать команды в боте.\n"
+        "Для полного обзора, истории и фильтров удобнее использовать веб-панель."
     )
 
 
