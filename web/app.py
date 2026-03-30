@@ -52,19 +52,43 @@ async def ensure_db() -> tuple[bool, str | None]:
     global _db_ready, _db_error
     if _db_ready:
         return True, None
-    try:
-        if _pg_session_factory is not None:
+
+    pg_ok = False
+    pg_error: str | None = None
+    sqlite_ok = False
+    sqlite_error: str | None = None
+
+    if _pg_session_factory is not None:
+        try:
             async with _pg_session_factory() as session:
                 await session.execute(text("SELECT 1"))
-        else:
-            await db.init()
+            pg_ok = True
+        except Exception as exc:
+            pg_error = str(exc)
+            logger.error("Web Postgres init failed: %s", exc)
+
+    try:
+        await db.init()
+        sqlite_ok = True
+    except Exception as exc:
+        sqlite_error = str(exc)
+        logger.warning("Web SQLite init failed (legacy fallback unavailable): %s", exc)
+
+    if _pg_session_factory is not None:
+        if pg_ok:
+            _db_ready = True
+            _db_error = sqlite_error
+            return True, sqlite_error
+        _db_error = pg_error or sqlite_error
+        return False, _db_error
+
+    if sqlite_ok:
         _db_ready = True
         _db_error = None
         return True, None
-    except Exception as exc:
-        _db_error = str(exc)
-        logger.error("Web DB init failed: %s", exc)
-        return False, _db_error
+
+    _db_error = sqlite_error
+    return False, _db_error
 
 
 def reviewer_read_service() -> ReviewerService:
@@ -114,7 +138,10 @@ async def require_operator(request: Request) -> int | RedirectResponse:
 async def startup() -> None:
     ok, err = await ensure_db()
     if ok:
-        logger.info("Web admin DB init complete.")
+        if err:
+            logger.info("Web admin DB init complete (legacy SQLite fallback unavailable: %s)", err)
+        else:
+            logger.info("Web admin DB init complete.")
     else:
         logger.warning("Web admin started in degraded mode (db unavailable): %s", err)
 
