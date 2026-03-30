@@ -56,6 +56,17 @@ async def truncate_tables(conn, tables: Iterable[str]) -> None:
         await conn.execute(text(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE'))
 
 
+async def ensure_compatible_schema(conn) -> None:
+    await conn.execute(
+        text(
+            """
+            ALTER TABLE employees
+            ALTER COLUMN telegram_id TYPE BIGINT
+            """
+        )
+    )
+
+
 def _coerce_value(value, data_type: str):
     if value is None:
         return None
@@ -148,6 +159,8 @@ async def main() -> None:
 
     engine = create_async_engine(database_url, future=True)
     async with engine.begin() as conn:
+        await ensure_compatible_schema(conn)
+
         if args.truncate:
             await truncate_tables(conn, TABLES)
 
