@@ -16,6 +16,7 @@ from services.payroll import PayrollService
 from services.reviewer import ReviewerService
 from services.reviewer_domain import ReviewerDomainService
 from services.smm import SmmService
+from services.smm_domain import SmmDomainService
 from storage.repositories import (
     PostgresDashboardReadRepository,
     PostgresEmployeeReadRepository,
@@ -23,6 +24,7 @@ from storage.repositories import (
     PostgresSmmReadRepository,
 )
 from storage.repositories.reviewer_domain import PostgresReviewerDomainRepository
+from storage.repositories.smm_domain import PostgresSmmDomainRepository
 from storage.session import create_session_factory
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -72,6 +74,12 @@ def reviewer_domain_service() -> ReviewerDomainService:
     if _pg_session_factory is not None:
         return ReviewerDomainService(PostgresReviewerDomainRepository(_pg_session_factory, admin_fallback=db))
     return ReviewerDomainService(db)
+
+
+def smm_domain_service() -> SmmDomainService:
+    if _pg_session_factory is not None:
+        return SmmDomainService(PostgresSmmDomainRepository(_pg_session_factory, admin_fallback=db))
+    return SmmDomainService(db)
 
 
 @app.on_event("startup")
@@ -198,18 +206,43 @@ async def reviewer_entry_reject(review_entry_id: int, comment: str = Form(defaul
 
 
 @app.get("/admin/payouts", response_class=HTMLResponse)
-async def payouts_page(request: Request):
+async def payouts_page(request: Request, message: str | None = None):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    reviewer = reviewer_read_service()
-    smm = SmmService(PostgresSmmReadRepository(_pg_session_factory)) if _pg_session_factory is not None else SmmService(db)
+    reviewer = reviewer_domain_service()
+    smm = smm_domain_service()
     return TEMPLATES.TemplateResponse(
         "payouts.html",
         {
             "request": request,
             "title": "Payouts",
-            "reviewer_batches": await reviewer.pending_batches(),
-            "smm_batches": await smm.pending_batches(),
+            "message": message,
+            "reviewer_batches": await reviewer.list_pending_reviewer_batches(),
+            "smm_batches": await smm.list_pending_smm_batches(),
+            "reviewer_history": await reviewer.list_recent_reviewer_batches(limit=10),
+            "smm_history": await smm.list_recent_smm_batches(limit=10),
         },
     )
+
+
+@app.post("/admin/payouts/reviewer/{batch_id}/paid")
+async def reviewer_batch_paid(batch_id: int):
+    ok, _ = await ensure_db()
+    if not ok:
+        return HTMLResponse("DB unavailable", status_code=503)
+    service = reviewer_domain_service()
+    result = await service.mark_reviewer_batch_paid(batch_id, 0)
+    message = "Reviewer batch marked as paid." if result else "Reviewer batch not found or already closed."
+    return RedirectResponse(url=f"/admin/payouts?message={message}", status_code=303)
+
+
+@app.post("/admin/payouts/smm/{batch_id}/paid")
+async def smm_batch_paid(batch_id: int):
+    ok, _ = await ensure_db()
+    if not ok:
+        return HTMLResponse("DB unavailable", status_code=503)
+    service = smm_domain_service()
+    result = await service.mark_smm_batch_paid(batch_id, 0)
+    message = "SMM batch marked as paid." if result else "SMM batch not found or already closed."
+    return RedirectResponse(url=f"/admin/payouts?message={message}", status_code=303)
