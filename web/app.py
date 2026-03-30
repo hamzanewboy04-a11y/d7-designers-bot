@@ -352,7 +352,12 @@ async def legacy_reports_page(request: Request):
 
 
 @app.get("/admin/legacy-daily", response_class=HTMLResponse)
-async def legacy_daily_reports_page(request: Request, report_date: str | None = None, designer_id: int | None = None):
+async def legacy_daily_reports_page(
+    request: Request,
+    report_date: str | None = None,
+    designer_id: int | None = None,
+    payment_status: str | None = None,
+):
     operator = await require_operator(request)
     if isinstance(operator, RedirectResponse):
         return operator
@@ -361,7 +366,7 @@ async def legacy_daily_reports_page(request: Request, report_date: str | None = 
     rows: list[dict] = []
     try:
         parsed_date = date.fromisoformat(selected_date)
-        raw_rows = await db.list_tasks_by_date_for_web(parsed_date, designer_id)
+        raw_rows = await db.list_tasks_by_date_for_web(parsed_date, designer_id, payment_status or None)
         rows = [
             {
                 "designer_id": row[0],
@@ -384,6 +389,7 @@ async def legacy_daily_reports_page(request: Request, report_date: str | None = 
             "title": "Legacy-отчёты за день",
             "report_date": selected_date,
             "designer_id": designer_id,
+            "payment_status": payment_status,
             "rows": rows,
             "operator_id": operator,
         },

@@ -1398,34 +1398,32 @@ class Database:
             )
             return await cursor.fetchall()
 
-    async def list_tasks_by_date_for_web(self, report_date: date, designer_id: int | None = None) -> list[tuple]:
+    async def list_tasks_by_date_for_web(
+        self,
+        report_date: date,
+        designer_id: int | None = None,
+        payment_status: str | None = None,
+    ) -> list[tuple]:
         """
         Return detailed task rows for web admin.
         Each row: (designer_id, d7_nick, wallet, task_code, cost_usdt, payment_status)
         """
         async with aiosqlite.connect(self.path) as db:
-            if designer_id is None:
-                cursor = await db.execute(
-                    """
-                    SELECT d.telegram_id, d.d7_nick, d.wallet, r.task_code, r.cost_usdt, r.payment_status
-                    FROM reports r
-                    JOIN designers d ON d.telegram_id = r.designer_id
-                    WHERE r.report_date = ?
-                    ORDER BY d.d7_nick, r.task_code
-                    """,
-                    (report_date.isoformat(),),
-                )
-            else:
-                cursor = await db.execute(
-                    """
-                    SELECT d.telegram_id, d.d7_nick, d.wallet, r.task_code, r.cost_usdt, r.payment_status
-                    FROM reports r
-                    JOIN designers d ON d.telegram_id = r.designer_id
-                    WHERE r.report_date = ? AND d.telegram_id = ?
-                    ORDER BY d.d7_nick, r.task_code
-                    """,
-                    (report_date.isoformat(), designer_id),
-                )
+            query = """
+                SELECT d.telegram_id, d.d7_nick, d.wallet, r.task_code, r.cost_usdt, r.payment_status
+                FROM reports r
+                JOIN designers d ON d.telegram_id = r.designer_id
+                WHERE r.report_date = ?
+            """
+            params: list[object] = [report_date.isoformat()]
+            if designer_id is not None:
+                query += " AND d.telegram_id = ?"
+                params.append(designer_id)
+            if payment_status:
+                query += " AND r.payment_status = ?"
+                params.append(payment_status)
+            query += " ORDER BY d.d7_nick, r.task_code"
+            cursor = await db.execute(query, tuple(params))
             return await cursor.fetchall()
 
     async def list_tasks_by_designer(
