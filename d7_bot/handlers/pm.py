@@ -66,7 +66,7 @@ async def cmd_pm_review_queue(
     backend = reviewer_domain or db
     rows = await backend.list_pending_review_entries(limit=20)
     if not rows:
-        await message.answer("ℹ️ Pending reviewer v2 entries нет.")
+        await message.answer("ℹ️ Сейчас нет reviewer-отчётов, ожидающих проверки.")
         return
 
     lines = ["🧾 <b>Pending reviewer v2 entries</b>", ""]
@@ -114,7 +114,9 @@ async def cmd_pm_review_verify(
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
         f"Строк: <b>{result['item_count']}</b>\n"
-        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
+        "<b>Что дальше:</b>\n"
+        "Теперь этот отчёт можно включать в batch на выплату."
     )
 
 
@@ -151,7 +153,9 @@ async def cmd_pm_review_reject(
         f"Entry: <code>{result['review_entry_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
-        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
+        "<b>Что дальше:</b>\n"
+        "Теперь этот отчёт можно включать в batch на выплату."
         + (f"\nКомментарий: <i>{html.escape(comment)}</i>" if comment else "")
     )
 
@@ -184,7 +188,7 @@ async def cmd_pm_review_batch_create(
     backend = reviewer_domain or db
     created = await backend.create_reviewer_payout_batches()
     if not created:
-        await message.answer("ℹ️ Нет новых verified reviewer entries для batch creation.")
+        await message.answer("ℹ️ Сейчас нет новых подтверждённых reviewer-отчётов для формирования batch'ей.")
         return
 
     total = sum(item['total_usdt'] for item in created)
@@ -212,7 +216,7 @@ async def cmd_pm_review_batches(
     backend = reviewer_domain or db
     rows = await backend.list_pending_reviewer_batches()
     if not rows:
-        await message.answer("ℹ️ Pending reviewer batch'ей пока нет.")
+        await message.answer("ℹ️ Сейчас нет reviewer batch'ей, ожидающих оплату.")
         return
 
     lines = ["📦 <b>Pending reviewer batches</b>", ""]
@@ -256,7 +260,9 @@ async def cmd_pm_review_batch_paid(
         f"Batch: <code>{result['batch_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
-        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
+        "<b>Что дальше:</b>\n"
+        "Теперь этот отчёт можно включать в batch на выплату."
     )
 
     reviewer = await backend.get_employee(result['employee_id'])
@@ -267,7 +273,9 @@ async def cmd_pm_review_batch_paid(
                 "💸 <b>Твоя выплата по reviewer-отчёту отправлена</b>\n\n"
                 f"Batch: <code>{result['batch_id']}</code>\n"
                 f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
-                f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>",
+                f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
+        "<b>Что дальше:</b>\n"
+        "Теперь этот отчёт можно включать в batch на выплату.",
             )
         except Exception as exc:
             logger.warning("Could not notify reviewer %s about paid batch: %s", reviewer.telegram_id, exc)
@@ -370,7 +378,7 @@ async def cmd_pm_smm_assignments(
     backend = smm_domain or db
     rows = await backend.list_active_smm_assignments_detailed()
     if not rows:
-        await message.answer("ℹ️ Активных SMM assignment'ов пока нет.")
+        await message.answer("ℹ️ Сейчас нет активных SMM-назначений.")
         return
 
     lines = ["📋 <b>Активные SMM assignments</b>", ""]
@@ -497,7 +505,7 @@ async def cmd_pm_smm_batch_create(
     created = await backend.create_smm_weekly_batches(period_start, period_end)
     if not created:
         await message.answer(
-            f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> нет новых SMM записей для batch creation."
+            f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> нет новых SMM-записей для формирования batch'ей."
         )
         return
 
@@ -531,7 +539,7 @@ async def cmd_pm_smm_batches(
     backend = smm_domain or db
     rows = await backend.list_pending_smm_batches()
     if not rows:
-        await message.answer("ℹ️ Pending SMM weekly batch'ей пока нет.")
+        await message.answer("ℹ️ Сейчас нет SMM batch'ей, ожидающих оплату.")
         return
 
     lines = ["📦 <b>Pending SMM weekly batches</b>", ""]
@@ -575,7 +583,9 @@ async def cmd_pm_smm_batch_paid(
         f"Batch: <code>{result['batch_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Период: <code>{html.escape(result['period_start'])}</code> — <code>{html.escape(result['period_end'])}</code>\n"
-        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>"
+        f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
+        "<b>Что дальше:</b>\n"
+        "Теперь этот отчёт можно включать в batch на выплату."
     )
 
     smm_employee = await backend.get_employee(result['employee_id'])
@@ -586,7 +596,9 @@ async def cmd_pm_smm_batch_paid(
                 "💸 <b>Твоя SMM weekly выплата отправлена</b>\n\n"
                 f"Batch: <code>{result['batch_id']}</code>\n"
                 f"Период: <code>{html.escape(result['period_start'])}</code> — <code>{html.escape(result['period_end'])}</code>\n"
-                f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>",
+                f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
+        "<b>Что дальше:</b>\n"
+        "Теперь этот отчёт можно включать в batch на выплату.",
             )
         except Exception as exc:
             logger.warning("Could not notify SMM %s about paid batch: %s", smm_employee.telegram_id, exc)
@@ -644,7 +656,7 @@ async def cmd_pm_smm_report(
     lines = [
         "🧾 <b>PM → SMM daily entry</b>",
         "",
-        "Выбери SMM сотрудника и отправь его <code>ID</code> из списка:",
+        "Выберите SMM-сотрудника и отправьте его <code>ID</code> из списка.",
         "",
     ]
     for employee in smm_employees:
@@ -678,7 +690,7 @@ async def step_choose_smm(
     if not assignments:
         await message.answer(
             "⚠️ У этого SMM пока нет активных assignment'ов.\n"
-            "Сначала нужно завести каналы и ставки в базе."
+            "Сначала нужно создать назначение с каналом и ставкой."
         )
         await state.clear()
         return
@@ -732,8 +744,8 @@ async def step_choose_assignment(
     await state.set_state(PmSmmEntryStates.choose_date)
     await message.answer(
         f"✅ Assignment: <b>{html.escape(assignment.channel_name)}</b> | {assignment.daily_rate_usdt:.2f} USDT/день\n\n"
-        f"Отправь дату в формате <code>YYYY-MM-DD</code>.\n"
-        f"Если это отчёт за вчера — просто отправь: <code>{default_date}</code>"
+        f"Теперь отправьте дату в формате <code>YYYY-MM-DD</code>.\n"
+        f"Если это отчёт за вчера — можно просто отправить: <code>{default_date}</code>"
     )
 
 
@@ -744,13 +756,13 @@ async def step_choose_date(message: Message, state: FSMContext) -> None:
         from datetime import date
         parsed = date.fromisoformat(raw)
     except ValueError:
-        await message.answer("❌ Неверный формат даты. Используй <code>YYYY-MM-DD</code>.")
+        await message.answer("❌ Неверный формат даты. Используйте <code>YYYY-MM-DD</code>. Например: <code>2026-03-29</code>")
         return
 
     await state.update_data(report_date=parsed.isoformat())
     await state.set_state(PmSmmEntryStates.enter_comment)
     await message.answer(
-        "Введите комментарий к записи или отправь <code>-</code>, если комментарий не нужен."
+        "Добавьте комментарий к записи или отправьте <code>-</code>, если комментарий не нужен."
     )
 
 
