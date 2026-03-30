@@ -12,9 +12,11 @@ from d7_bot.db import Database
 from d7_bot.keyboards import (
     BTN_ADMIN_HUB,
     BTN_EDIT,
+    BTN_HELP,
     BTN_PROFILE,
     BTN_REPORT,
     BTN_TASKS,
+    ROLE_LABELS,
     admin_hub_keyboard,
     main_menu_keyboard,
     period_keyboard,
@@ -38,31 +40,138 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
     is_admin = await db.is_admin(user.id, config.admin_ids)
 
     if designer:
+        role_label = ROLE_LABELS.get(designer.role or "", designer.role or "сотрудник")
+        if designer.role == "designer":
+            role_hint = (
+                "<b>Что вы можете делать здесь:</b>\n"
+                "• сдавать ежедневные отчёты\n"
+                "• смотреть свои последние задачи\n"
+                "• обновлять профиль и кошелёк\n\n"
+                "<b>С чего начать:</b>\n"
+                "1. Нажмите <b>📝 Сдать отчёт</b>\n"
+                "2. Проверьте себя в <b>👤 Мой профиль</b>\n"
+                "3. Если что-то непонятно — откройте <b>❓ Помощь</b>"
+            )
+        elif designer.role == "reviewer":
+            role_hint = (
+                "<b>Что вы можете делать здесь:</b>\n"
+                "• отправлять reviewer-отчёты\n"
+                "• следить за своим профилем\n"
+                "• понимать, что произойдёт после отправки отчёта\n\n"
+                "<b>Как это работает:</b>\n"
+                "Ваш отчёт уходит на проверку PM. После подтверждения он попадает в выплату."
+            )
+        elif designer.role == "smm":
+            role_hint = (
+                "<b>Что вы можете делать здесь:</b>\n"
+                "• смотреть свой профиль\n"
+                "• уточнять роль и рабочие данные\n\n"
+                "<b>Важно:</b>\n"
+                "SMM-записи и выплаты обычно ведутся через PM. Если есть вопросы по начислениям — откройте <b>❓ Помощь</b>."
+            )
+        elif designer.role == "project_manager":
+            role_hint = (
+                "<b>Что вы можете делать здесь:</b>\n"
+                "• работать с reviewer-очередью\n"
+                "• вести SMM-назначения\n"
+                "• управлять выплатами\n\n"
+                "Для операционных действий используйте <b>🛠 Админка</b> и <b>❓ Помощь</b>."
+            )
+        else:
+            role_hint = "Используйте меню ниже и раздел <b>❓ Помощь</b>, если хотите быстро понять, что к чему."
+
         admin_hint = (
-            "\n\n<b>Команды для администратора:</b>\n"
-            "• Кнопка <b>🛠 Админка</b> — полная панель управления\n"
-            "• /dashboard — сводный дашборд\n"
-            "• /listdesigners [role] — все сотрудники\n"
-            "• /adminreport — отчёт за день\n"
-            "• /pendingpayments — ожидающие оплаты\n"
-            "• /employeehistory &lt;id&gt; — история сотрудника"
+            "\n\n<b>Для админа дополнительно:</b>\n"
+            "• <b>🛠 Админка</b> — панель управления\n"
+            "• в вебке есть разделы по выплатам, сотрудникам и отчётам"
         ) if is_admin else ""
         text = (
             f"👋 Привет, <b>{first_name}</b>!\n\n"
-            f"Добро пожаловать обратно, <b>{designer.d7_nick}</b>! 👇\n\n"
-            f"Команды:\n"
+            f"Вы в системе как <b>{designer.d7_nick}</b> (<b>{role_label}</b>).\n\n"
+            f"{role_hint}\n\n"
+            f"<b>Основные действия:</b>\n"
             f"• /report — сдать отчёт\n"
             f"• /me — мой профиль\n"
             f"• /myreports — мои задачи\n"
-            f"• /register — обновить профиль"
+            f"• /register — обновить профиль\n"
+            f"• /help — помощь и объяснения"
             f"{admin_hint}"
         )
     else:
         text = (
             f"👋 Привет, <b>{first_name}</b>!\n\n"
-            f"Я помогаю команде D7 вести учёт задач.\n\n"
-            f"Для начала работы необходимо зарегистрироваться 👇\n\n"
-            f"Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register"
+            f"Я помогаю команде D7 вести отчётность, роли и выплаты.\n\n"
+            f"<b>Что нужно сделать сначала:</b>\n"
+            f"1. Зарегистрироваться\n"
+            f"2. Указать свою роль и кошелёк\n"
+            f"3. После этого появятся нужные вам действия\n\n"
+            f"Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register\n"
+            f"Если хотите понять, как всё устроено — откройте /help"
+        )
+
+    await message.answer(text, reply_markup=main_menu_keyboard(is_admin=is_admin))
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, db: Database, config: Config) -> None:
+    user = message.from_user
+    if not user:
+        return
+
+    is_admin = await db.is_admin(user.id, config.admin_ids)
+    designer = await db.get_designer(user.id)
+
+    if not designer:
+        text = (
+            "<b>❓ Как пользоваться ботом</b>\n\n"
+            "Сначала нужно зарегистрироваться: /register\n\n"
+            "После регистрации вы сможете:\n"
+            "• сдавать отчёты\n"
+            "• смотреть профиль\n"
+            "• видеть свои данные\n\n"
+            "Если вы не уверены, какая у вас роль, уточните у менеджера или администратора."
+        )
+    elif designer.role == "designer":
+        text = (
+            "<b>❓ Помощь для дизайнера</b>\n\n"
+            "<b>Что делать чаще всего:</b>\n"
+            "• <b>📝 Сдать отчёт</b> — отправить задачи за день\n"
+            "• <b>📋 Мои задачи</b> — посмотреть последние записи\n"
+            "• <b>👤 Мой профиль</b> — проверить роль и кошелёк\n\n"
+            "<b>Как работает выплата:</b>\n"
+            "После отправки отчёты попадают в систему оплаты. Статус зависит от проверки и обработки администратором.\n\n"
+            "<b>Если ошиблись:</b>\n"
+            "Обратитесь к менеджеру или администратору и не отправляйте дубликаты без необходимости."
+        )
+    elif designer.role == "reviewer":
+        text = (
+            "<b>❓ Помощь для отзовика</b>\n\n"
+            "<b>Как работает reviewer flow:</b>\n"
+            "1. Вы отправляете отчёт\n"
+            "2. PM проверяет его\n"
+            "3. После подтверждения отчёт попадает в batch на выплату\n\n"
+            "<b>Важно:</b>\n"
+            "Статусы могут быть submitted, verified или rejected. Если отчёт отклонён, обычно нужен комментарий или исправление."
+        )
+    elif designer.role == "smm":
+        text = (
+            "<b>❓ Помощь для SMM</b>\n\n"
+            "SMM-назначения и дневные записи обычно ведутся через PM.\n\n"
+            "<b>Что важно проверять:</b>\n"
+            "• ваш профиль\n"
+            "• корректность роли\n"
+            "• актуальность кошелька\n\n"
+            "Если есть вопрос по начислениям или активностям, лучше уточнять у PM."
+        )
+    else:
+        text = (
+            "<b>❓ Помощь для PM / администратора</b>\n\n"
+            "<b>Что доступно:</b>\n"
+            "• reviewer-очередь\n"
+            "• создание и обработка batch'ей\n"
+            "• SMM-назначения\n"
+            "• legacy-отчёты и история выплат\n\n"
+            "Для ручного управления используйте команды администратора и веб-панель."
         )
 
     await message.answer(text, reply_markup=main_menu_keyboard(is_admin=is_admin))
@@ -238,6 +347,11 @@ async def btn_tasks(message: Message, db: Database, config: Config) -> None:
 async def btn_edit(message: Message, state: FSMContext) -> None:
     from d7_bot.handlers.register import cmd_register
     await cmd_register(message, state)
+
+
+@router.message(F.text == BTN_HELP)
+async def btn_help(message: Message, db: Database, config: Config) -> None:
+    await cmd_help(message, db, config)
 
 
 # ── v8: Admin hub button handler ───────────────────────────────────────────

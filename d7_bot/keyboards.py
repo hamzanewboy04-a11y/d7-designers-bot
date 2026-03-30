@@ -28,6 +28,7 @@ BTN_REPORT = "📝 Сдать отчёт"
 BTN_PROFILE = "👤 Мой профиль"
 BTN_TASKS = "📋 Мои задачи"
 BTN_EDIT = "✏️ Редактировать профиль"
+BTN_HELP = "❓ Помощь"
 
 # v8: single admin hub button
 BTN_ADMIN_HUB = "🛠 Админка"
@@ -44,8 +45,8 @@ BTN_ADMIN_ANALYTICS_DAY = "📉 Аналитика день"
 BTN_ADMIN_ANALYTICS_WEEK = "📈 Аналитика 7 дней"
 BTN_ADMIN_ANALYTICS_MONTH = "🗓 Аналитика 30 дней"
 
-MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT}
-ADMIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_ADMIN_HUB}
+MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_HELP}
+ADMIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_HELP, BTN_ADMIN_HUB}
 
 
 # ── Reply keyboards ─────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
         [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_EDIT)],
+        [KeyboardButton(text=BTN_HELP)],
     ]
     if is_admin:
         keyboard.append([KeyboardButton(text=BTN_ADMIN_HUB)])
