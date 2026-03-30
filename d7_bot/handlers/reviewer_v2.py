@@ -58,8 +58,14 @@ async def cmd_report_reviews_v2(
     await state.update_data(items=[])
     await message.answer(
         "🧾 <b>Reviewer report v2</b>\n\n"
-        f"Отправь дату отчёта в формате <code>YYYY-MM-DD</code>.\n"
-        f"Обычно это вчера: <code>{default_date}</code>"
+        "Это новый основной формат отчёта для отзовиков.\n\n"
+        f"Сначала отправьте дату отчёта в формате <code>YYYY-MM-DD</code>.\n"
+        f"Обычно это вчера: <code>{default_date}</code>\n\n"
+        "После даты бот по шагам попросит:\n"
+        "• тип отзыва\n"
+        "• количество\n"
+        "• цену\n"
+        "• комментарий"
     )
 
 
@@ -79,15 +85,26 @@ async def step_choose_date(
     try:
         parsed = date.fromisoformat(raw)
     except ValueError:
-        await message.answer("❌ Неверный формат даты. Используй <code>YYYY-MM-DD</code>.")
+        await message.answer(
+            "❌ Неверный формат даты.\n\n"
+            "Используйте <code>YYYY-MM-DD</code>.\n"
+            f"Пример: <code>{(moscow_today() - timedelta(days=1)).isoformat()}</code>"
+        )
         return
 
     backend = reviewer_domain or db
     rules = await backend.list_review_rate_rules()
-    lines = [f"📅 Дата отчёта: <b>{html.escape(parsed.isoformat())}</b>", "", "Выбери тип отзыва:"]
+    lines = [
+        f"📅 Дата отчёта: <b>{html.escape(parsed.isoformat())}</b>",
+        "",
+        "<b>Теперь выберите тип отзыва.</b>",
+        "Если не уверены в цене — бот покажет дефолтную ставку на следующем шаге.",
+        "",
+        "Доступные типы:",
+    ]
     for rule in rules:
         lines.append(
-            f"• <code>{html.escape(rule['review_type'])}</code> — default {rule['default_unit_price']:.2f} USDT"
+            f"• <code>{html.escape(rule['review_type'])}</code> — по умолчанию {rule['default_unit_price']:.2f} USDT"
         )
     await state.update_data(report_date=parsed.isoformat())
     await state.set_state(ReviewerV2States.choose_type)
@@ -106,19 +123,19 @@ async def step_choose_type(
     rules = await backend.list_review_rate_rules()
     valid_types = {rule['review_type']: rule for rule in rules}
     if review_type not in valid_types:
-        await message.answer("❌ Неизвестный тип. Используй один из типов из списка.")
+        await message.answer("❌ Неизвестный тип. Используйте один из типов из списка выше.")
         return
 
     await state.update_data(current_review_type=review_type, current_default_price=valid_types[review_type]['default_unit_price'])
     await state.set_state(ReviewerV2States.choose_quantity)
-    await message.answer("Сколько отзывов этого типа сделано?")
+    await message.answer("Сколько отзывов этого типа было сделано? Введите целое положительное число.")
 
 
 @router.message(ReviewerV2States.choose_quantity)
 async def step_choose_quantity(message: Message, state: FSMContext) -> None:
     raw = (message.text or "").strip()
     if not raw.isdigit() or int(raw) <= 0:
-        await message.answer("❌ Введи количество целым положительным числом.")
+        await message.answer("❌ Введите количество целым положительным числом. Например: <code>12</code>")
         return
 
     await state.update_data(current_quantity=int(raw))
@@ -126,9 +143,9 @@ async def step_choose_quantity(message: Message, state: FSMContext) -> None:
     default_price = float(data.get('current_default_price') or 0)
     await state.set_state(ReviewerV2States.choose_price)
     await message.answer(
-        f"Цена за 1 отзыв в USDT.\n"
-        f"Default для этого типа: <b>{default_price:.2f}</b>\n"
-        f"Можешь отправить своё значение."
+        f"Теперь укажите цену за 1 отзыв в USDT.\n"
+        f"Для этого типа ставка по умолчанию: <b>{default_price:.2f}</b>\n"
+        f"Можно отправить своё значение, если оно отличается."
     )
 
 
@@ -140,12 +157,12 @@ async def step_choose_price(message: Message, state: FSMContext) -> None:
         if unit_price <= 0:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введи положительное число для цены.")
+        await message.answer("❌ Введите положительное число для цены. Например: <code>0.5</code> или <code>1.25</code>")
         return
 
     await state.update_data(current_unit_price=unit_price)
     await state.set_state(ReviewerV2States.choose_comment)
-    await message.answer("Комментарий к этой строке или <code>-</code>, если не нужен.")
+    await message.answer("Добавьте комментарий к этой строке или отправьте <code>-</code>, если комментарий не нужен.")
 
 
 @router.message(ReviewerV2States.choose_comment)
@@ -172,7 +189,8 @@ async def step_choose_comment(message: Message, state: FSMContext) -> None:
 
     await message.answer(
         f"✅ Добавлена строка: <b>{html.escape(review_type)}</b> | {quantity} шт | {unit_price:.2f} USDT | <b>{total_usdt:.2f} USDT</b>\n\n"
-        "Добавить ещё одну строку? Ответь <code>yes</code> / <code>no</code>."
+        "Если хотите добавить ещё одну строку — ответьте <code>yes</code>.\n"
+        "Если отчёт уже готов — ответьте <code>no</code>."
     )
 
 
@@ -181,13 +199,13 @@ async def step_confirm_more(message: Message, state: FSMContext) -> None:
     raw = (message.text or "").strip().lower()
     if raw in {"yes", "y", "да", "+"}:
         await state.set_state(ReviewerV2States.choose_type)
-        await message.answer("Ок. Отправь следующий тип отзыва.")
+        await message.answer("Ок, добавим ещё одну строку. Отправьте следующий тип отзыва.")
         return
     if raw in {"no", "n", "нет", "-"}:
         await state.set_state(ReviewerV2States.final_comment)
-        await message.answer("Финальный комментарий ко всему отчёту или <code>-</code>, если не нужен.")
+        await message.answer("Теперь можно добавить финальный комментарий ко всему отчёту или отправить <code>-</code>, если он не нужен.")
         return
-    await message.answer("Ответь <code>yes</code> или <code>no</code>.")
+    await message.answer("Ответьте <code>yes</code> или <code>no</code>.")
 
 
 @router.message(ReviewerV2States.final_comment)
@@ -207,7 +225,7 @@ async def step_final_comment(
     items_raw = data.get('items', [])
     if not items_raw:
         await state.clear()
-        await message.answer("❌ В отчёте нет строк.")
+        await message.answer("❌ В отчёте нет строк. Начните заново и добавьте хотя бы одну строку.")
         return
 
     final_comment_raw = (message.text or "").strip()
@@ -241,7 +259,11 @@ async def step_final_comment(
         f"Дата: <b>{html.escape(str(data['report_date']))}</b>\n"
         f"Строк: <b>{item_count}</b>\n"
         f"Сумма: <b>{total_usdt:.2f} USDT</b>\n"
-        f"Entry ID: <code>{review_entry_id}</code>",
+        f"Entry ID: <code>{review_entry_id}</code>\n\n"
+        "<b>Что дальше:</b>\n"
+        "• отчёт отправлен на проверку PM\n"
+        "• после подтверждения он попадёт в batch на выплату\n"
+        "• если PM отклонит отчёт, понадобится исправление или комментарий",
         reply_markup=main_menu_keyboard(
             is_admin=await (reviewer_domain or db).is_admin(message.from_user.id, config.admin_ids)
             if message.from_user else False
