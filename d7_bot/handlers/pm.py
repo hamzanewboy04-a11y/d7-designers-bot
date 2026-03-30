@@ -22,7 +22,7 @@ router = Router(name="pm")
 
 class PmSmmEntryStates(StatesGroup):
     choose_smm = State()
-    choose_assignment = State()
+    choose_назначение = State()
     choose_date = State()
     enter_comment = State()
 
@@ -66,10 +66,10 @@ async def cmd_pm_review_queue(
     backend = reviewer_domain or db
     rows = await backend.list_pending_review_entries(limit=20)
     if not rows:
-        await message.answer("ℹ️ Сейчас нет reviewer-отчётов, ожидающих проверки.")
+        await message.answer("ℹ️ Сейчас нет отчётов отзовиков, ожидающих проверки.")
         return
 
-    lines = ["🧾 <b>Pending reviewer v2 entries</b>", ""]
+    lines = ["🧾 <b>Отчёты отзовиков, ожидающие проверки</b>", ""]
     for item in rows:
         lines.append(
             f"• entry <code>{item['review_entry_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
@@ -109,7 +109,7 @@ async def cmd_pm_review_verify(
         return
 
     await message.answer(
-        "✅ <b>Reviewer entry verified</b>\n\n"
+        "✅ <b>Отчёт отзовика подтверждён</b>\n\n"
         f"Entry: <code>{result['review_entry_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
@@ -149,7 +149,7 @@ async def cmd_pm_review_reject(
         return
 
     await message.answer(
-        "🚫 <b>Reviewer entry rejected</b>\n\n"
+        "🚫 <b>Отчёт отзовика отклонён</b>\n\n"
         f"Entry: <code>{result['review_entry_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Дата: <b>{html.escape(result['report_date'])}</b>\n"
@@ -188,7 +188,7 @@ async def cmd_pm_review_batch_create(
     backend = reviewer_domain or db
     created = await backend.create_reviewer_payout_batches()
     if not created:
-        await message.answer("ℹ️ Сейчас нет новых подтверждённых reviewer-отчётов для формирования batch'ей.")
+        await message.answer("ℹ️ Сейчас нет новых подтверждённых отчётов отзовиков для формирования пачек выплат.")
         return
 
     total = sum(item['total_usdt'] for item in created)
@@ -198,7 +198,7 @@ async def cmd_pm_review_batch_create(
             f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>"
             f" | entry <code>{item['review_entry_id']}</code> | {item['total_usdt']:.2f} USDT"
         )
-    lines.append("\nПосмотреть pending batch'и: <code>/pm_review_batches</code>")
+    lines.append("\nПосмотреть ожидающие пачки выплат: <code>/pm_review_batches</code>")
     await message.answer("\n".join(lines))
 
 
@@ -216,14 +216,14 @@ async def cmd_pm_review_batches(
     backend = reviewer_domain or db
     rows = await backend.list_pending_reviewer_batches()
     if not rows:
-        await message.answer("ℹ️ Сейчас нет reviewer batch'ей, ожидающих оплату.")
+        await message.answer("ℹ️ Сейчас нет reviewer пачек выплат, ожидающих оплату.")
         return
 
     lines = ["📦 <b>Pending reviewer batches</b>", ""]
     for item in rows:
         lines.append(
             f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
-            f"  {html.escape(item['period_start'])} | {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>"
+            f"  {html.escape(item['period_start'])} | {item['item_count']} строк | <b>{item['total_usdt']:.2f} USDT</b>"
         )
     lines.append("\nОплатить: <code>/pm_review_batch_paid &lt;batch_id&gt;</code>")
     await message.answer("\n".join(lines))
@@ -256,8 +256,8 @@ async def cmd_pm_review_batch_paid(
         return
 
     await message.answer(
-        "✅ <b>Reviewer batch отмечен как paid</b>\n\n"
-        f"Batch: <code>{result['batch_id']}</code>\n"
+        "✅ <b>Пачка выплат отзовику отмечена как оплаченная</b>\n\n"
+        f"Пачка: <code>{result['batch_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
@@ -271,7 +271,7 @@ async def cmd_pm_review_batch_paid(
             await bot.send_message(
                 reviewer.telegram_id,
                 "💸 <b>Твоя выплата по reviewer-отчёту отправлена</b>\n\n"
-                f"Batch: <code>{result['batch_id']}</code>\n"
+                f"Пачка: <code>{result['batch_id']}</code>\n"
                 f"Дата: <b>{html.escape(result['period_start'])}</b>\n"
                 f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
         "<b>Что дальше:</b>\n"
@@ -301,10 +301,10 @@ async def cmd_pm_review_batch_history(
     lines = ["🧾 <b>Reviewer batch history</b>", ""]
     for item in rows:
         status_icon = '✅' if item['status'] == 'paid' else '⏳'
-        paid_at = f" | paid at {html.escape(str(item['paid_at']))[:10]}" if item['paid_at'] else ''
+        paid_at = f" | оплачено {html.escape(str(item['paid_at']))[:10]}" if item['paid_at'] else ''
         lines.append(
             f"{status_icon} batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
-            f"  {html.escape(item['period_start'])} | {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>{paid_at}"
+            f"  {html.escape(item['period_start'])} | {item['item_count']} строк | <b>{item['total_usdt']:.2f} USDT</b>{paid_at}"
         )
     await message.answer("\n".join(lines))
 
@@ -347,7 +347,7 @@ async def cmd_pm_smm_assign(
         await message.answer("❌ daily_rate должен быть положительным числом.")
         return
 
-    assignment_id = await backend.add_smm_assignment(
+    назначение_id = await backend.add_smm_назначение(
         smm_employee_id=employee.id,
         channel_name=channel_name,
         geo=geo.upper(),
@@ -355,17 +355,17 @@ async def cmd_pm_smm_assign(
         active_from=moscow_today().isoformat(),
     )
     await message.answer(
-        "✅ <b>SMM assignment создан</b>\n\n"
+        "✅ <b>Назначение для SMM создано</b>\n\n"
         f"Сотрудник: <b>{html.escape(employee.display_name)}</b>\n"
         f"Канал: <b>{html.escape(channel_name)}</b>\n"
         f"Гео: <b>{html.escape(geo.upper())}</b>\n"
         f"Ставка: <b>{daily_rate:.2f} USDT/день</b>\n"
-        f"Assignment ID: <code>{assignment_id}</code>"
+        f"Assignment ID: <code>{назначение_id}</code>"
     )
 
 
-@router.message(Command("pm_smm_assignments"))
-async def cmd_pm_smm_assignments(
+@router.message(Command("pm_smm_назначениеs"))
+async def cmd_pm_smm_назначениеs(
     message: Message,
     db: Database,
     config: Config,
@@ -376,20 +376,20 @@ async def cmd_pm_smm_assignments(
         return
 
     backend = smm_domain or db
-    rows = await backend.list_active_smm_assignments_detailed()
+    rows = await backend.list_active_smm_назначениеs_detailed()
     if not rows:
         await message.answer("ℹ️ Сейчас нет активных SMM-назначений.")
         return
 
-    lines = ["📋 <b>Активные SMM assignments</b>", ""]
+    lines = ["📋 <b>Активные SMM назначениеs</b>", ""]
     current_employee_id: int | None = None
-    for assignment, employee in rows:
+    for назначение, employee in rows:
         if employee.id != current_employee_id:
             current_employee_id = employee.id
-            lines.append(f"👤 <b>{html.escape(employee.display_name)}</b> — employee ID <code>{employee.id}</code>")
+            lines.append(f"👤 <b>{html.escape(employee.display_name)}</b> — ID сотрудника <code>{employee.id}</code>")
         lines.append(
-            f"• assignment ID <code>{assignment.id}</code> | <b>{html.escape(assignment.channel_name)}</b>"
-            f" | {html.escape(assignment.geo or '—')} | {assignment.daily_rate_usdt:.2f} USDT/день"
+            f"• назначение ID <code>{назначение.id}</code> | <b>{html.escape(назначение.channel_name)}</b>"
+            f" | {html.escape(назначение.geo or '—')} | {назначение.daily_rate_usdt:.2f} USDT/день"
         )
 
     await message.answer("\n".join(lines))
@@ -432,7 +432,7 @@ async def cmd_pm_smm_weekly(
     ]
     for item in rows:
         lines.append(
-            f"• <b>{html.escape(item['display_name'])}</b> — employee ID <code>{item['employee_id']}</code>\n"
+            f"• <b>{html.escape(item['display_name'])}</b> — ID сотрудника <code>{item['employee_id']}</code>\n"
             f"  {item['entry_count']} записей / {item['day_count']} дней / <b>{item['total_usdt']:.2f} USDT</b>"
         )
 
@@ -505,7 +505,7 @@ async def cmd_pm_smm_batch_create(
     created = await backend.create_smm_weekly_batches(period_start, period_end)
     if not created:
         await message.answer(
-            f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> нет новых SMM-записей для формирования batch'ей."
+            f"ℹ️ За период <code>{period_start}</code> — <code>{period_end}</code> нет новых SMM-записей для формирования пачек выплат."
         )
         return
 
@@ -521,7 +521,7 @@ async def cmd_pm_smm_batch_create(
             f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>"
             f" — {item['total_usdt']:.2f} USDT"
         )
-    lines.append("\nПосмотреть pending batch'и: <code>/pm_smm_batches</code>")
+    lines.append("\nПосмотреть ожидающие пачки выплат: <code>/pm_smm_batches</code>")
     await message.answer("\n".join(lines))
 
 
@@ -539,15 +539,15 @@ async def cmd_pm_smm_batches(
     backend = smm_domain or db
     rows = await backend.list_pending_smm_batches()
     if not rows:
-        await message.answer("ℹ️ Сейчас нет SMM batch'ей, ожидающих оплату.")
+        await message.answer("ℹ️ Сейчас нет SMM пачек выплат, ожидающих оплату.")
         return
 
-    lines = ["📦 <b>Pending SMM weekly batches</b>", ""]
+    lines = ["📦 <b>Пачки выплат SMM, ожидающие оплату</b>", ""]
     for item in rows:
         lines.append(
             f"• batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
-            f"  employee ID <code>{item['employee_id']}</code> | {html.escape(item['period_start'])} — {html.escape(item['period_end'])}\n"
-            f"  {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>"
+            f"  ID сотрудника <code>{item['employee_id']}</code> | {html.escape(item['period_start'])} — {html.escape(item['period_end'])}\n"
+            f"  {item['item_count']} строк | <b>{item['total_usdt']:.2f} USDT</b>"
         )
     await message.answer("\n".join(lines))
 
@@ -579,8 +579,8 @@ async def cmd_pm_smm_batch_paid(
         return
 
     await message.answer(
-        "✅ <b>SMM batch отмечен как paid</b>\n\n"
-        f"Batch: <code>{result['batch_id']}</code>\n"
+        "✅ <b>Пачка выплат SMM отмечена как оплаченная</b>\n\n"
+        f"Пачка: <code>{result['batch_id']}</code>\n"
         f"Сотрудник: <b>{html.escape(result['display_name'])}</b>\n"
         f"Период: <code>{html.escape(result['period_start'])}</code> — <code>{html.escape(result['period_end'])}</code>\n"
         f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
@@ -593,8 +593,8 @@ async def cmd_pm_smm_batch_paid(
         try:
             await bot.send_message(
                 smm_employee.telegram_id,
-                "💸 <b>Твоя SMM weekly выплата отправлена</b>\n\n"
-                f"Batch: <code>{result['batch_id']}</code>\n"
+                "💸 <b>Твоя SMM недельная выплата отправлена</b>\n\n"
+                f"Пачка: <code>{result['batch_id']}</code>\n"
                 f"Период: <code>{html.escape(result['period_start'])}</code> — <code>{html.escape(result['period_end'])}</code>\n"
                 f"Сумма: <b>{result['total_usdt']:.2f} USDT</b>\n\n"
         "<b>Что дальше:</b>\n"
@@ -618,16 +618,16 @@ async def cmd_pm_smm_batch_history(
     backend = smm_domain or db
     rows = await backend.list_recent_smm_batches(limit=15)
     if not rows:
-        await message.answer("ℹ️ SMM batch history пока пустая.")
+        await message.answer("ℹ️ История выплат SMM пока пустая.")
         return
 
-    lines = ["🧾 <b>SMM batch history</b>", ""]
+    lines = ["🧾 <b>История выплат SMM</b>", ""]
     for item in rows:
         status_icon = '✅' if item['status'] == 'paid' else '⏳'
-        paid_at = f" | paid at {html.escape(str(item['paid_at']))[:10]}" if item['paid_at'] else ''
+        paid_at = f" | оплачено {html.escape(str(item['paid_at']))[:10]}" if item['paid_at'] else ''
         lines.append(
             f"{status_icon} batch <code>{item['batch_id']}</code> | <b>{html.escape(item['display_name'])}</b>\n"
-            f"  {html.escape(item['period_start'])} — {html.escape(item['period_end'])} | {item['item_count']} items | <b>{item['total_usdt']:.2f} USDT</b>{paid_at}"
+            f"  {html.escape(item['period_start'])} — {html.escape(item['period_end'])} | {item['item_count']} строк | <b>{item['total_usdt']:.2f} USDT</b>{paid_at}"
         )
     await message.answer("\n".join(lines))
 
@@ -654,7 +654,7 @@ async def cmd_pm_smm_report(
     await state.set_state(PmSmmEntryStates.choose_smm)
 
     lines = [
-        "🧾 <b>PM → SMM daily entry</b>",
+        "🧾 <b>PM → запись за день для SMM</b>",
         "",
         "Выберите SMM-сотрудника и отправьте его <code>ID</code> из списка.",
         "",
@@ -686,34 +686,34 @@ async def step_choose_smm(
         await message.answer("❌ SMM сотрудник не найден или не активен.")
         return
 
-    assignments = await backend.list_active_smm_assignments(smm_employee.id)
-    if not assignments:
+    назначениеs = await backend.list_active_smm_назначениеs(smm_employee.id)
+    if not назначениеs:
         await message.answer(
-            "⚠️ У этого SMM пока нет активных assignment'ов.\n"
+            "⚠️ У этого SMM пока нет активных назначений.\n"
             "Сначала нужно создать назначение с каналом и ставкой."
         )
         await state.clear()
         return
 
     await state.update_data(smm_employee_id=smm_employee.id)
-    await state.set_state(PmSmmEntryStates.choose_assignment)
+    await state.set_state(PmSmmEntryStates.choose_назначение)
 
     lines = [
         f"✅ SMM: <b>{html.escape(smm_employee.display_name)}</b>",
         "",
-        "Теперь отправь <code>ID</code> assignment'а:",
+        "Теперь отправь <code>ID</code> назначение'а:",
         "",
     ]
-    for assignment in assignments:
+    for назначение in назначениеs:
         lines.append(
-            f"• ID <code>{assignment.id}</code> — <b>{html.escape(assignment.channel_name)}</b>"
-            f" | {html.escape(assignment.geo or '—')} | {assignment.daily_rate_usdt:.2f} USDT/день"
+            f"• ID <code>{назначение.id}</code> — <b>{html.escape(назначение.channel_name)}</b>"
+            f" | {html.escape(назначение.geo or '—')} | {назначение.daily_rate_usdt:.2f} USDT/день"
         )
     await message.answer("\n".join(lines))
 
 
-@router.message(PmSmmEntryStates.choose_assignment)
-async def step_choose_assignment(
+@router.message(PmSmmEntryStates.choose_назначение)
+async def step_choose_назначение(
     message: Message,
     state: FSMContext,
     db: Database,
@@ -724,26 +724,26 @@ async def step_choose_assignment(
     smm_employee_id = int(data["smm_employee_id"])
 
     if not raw.isdigit():
-        await message.answer("⚠️ Отправь числовой ID assignment'а.")
+        await message.answer("⚠️ Отправь числовой ID назначение'а.")
         return
 
     backend = smm_domain or db
-    assignments = await backend.list_active_smm_assignments(smm_employee_id)
-    assignment = next((a for a in assignments if a.id == int(raw)), None)
-    if not assignment:
-        await message.answer("❌ Assignment не найден среди активных для этого SMM.")
+    назначениеs = await backend.list_active_smm_назначениеs(smm_employee_id)
+    назначение = next((a for a in назначениеs if a.id == int(raw)), None)
+    if not назначение:
+        await message.answer("❌ Назначение не найдено среди активных для этого SMM.")
         return
 
     default_date = (moscow_today() - timedelta(days=1)).isoformat()
     await state.update_data(
-        assignment_id=assignment.id,
-        assignment_channel=assignment.channel_name,
-        assignment_geo=assignment.geo,
-        assignment_rate=assignment.daily_rate_usdt,
+        назначение_id=назначение.id,
+        назначение_channel=назначение.channel_name,
+        назначение_geo=назначение.geo,
+        назначение_rate=назначение.daily_rate_usdt,
     )
     await state.set_state(PmSmmEntryStates.choose_date)
     await message.answer(
-        f"✅ Assignment: <b>{html.escape(assignment.channel_name)}</b> | {assignment.daily_rate_usdt:.2f} USDT/день\n\n"
+        f"✅ Назначение: <b>{html.escape(назначение.channel_name)}</b> | {назначение.daily_rate_usdt:.2f} USDT/день\n\n"
         f"Теперь отправьте дату в формате <code>YYYY-MM-DD</code>.\n"
         f"Если это отчёт за вчера — можно просто отправить: <code>{default_date}</code>"
     )
@@ -794,21 +794,21 @@ async def step_enter_comment(
         smm_employee_id=smm_employee.id,
         entered_by_pm_id=pm.id,
         report_date=str(data["report_date"]),
-        assignment_id=int(data["assignment_id"]),
-        channel_name_snapshot=str(data["assignment_channel"]),
-        geo_snapshot=str(data.get("assignment_geo") or ""),
-        daily_rate_snapshot=float(data["assignment_rate"]),
+        назначение_id=int(data["назначение_id"]),
+        channel_name_snapshot=str(data["назначение_channel"]),
+        geo_snapshot=str(data.get("назначение_geo") or ""),
+        daily_rate_snapshot=float(data["назначение_rate"]),
         comment=comment,
     )
 
     await state.clear()
     await message.answer(
-        "✅ <b>SMM daily entry сохранён</b>\n\n"
+        "✅ <b>Запись за день для SMM сохранена</b>\n\n"
         f"Сотрудник: <b>{html.escape(smm_employee.display_name)}</b>\n"
-        f"Канал: <b>{html.escape(str(data['assignment_channel']))}</b>\n"
-        f"Гео: <b>{html.escape(str(data.get('assignment_geo') or '—'))}</b>\n"
+        f"Канал: <b>{html.escape(str(data['назначение_channel']))}</b>\n"
+        f"Гео: <b>{html.escape(str(data.get('назначение_geo') or '—'))}</b>\n"
         f"Дата: <b>{html.escape(str(data['report_date']))}</b>\n"
-        f"Сумма: <b>{float(data['assignment_rate']):.2f} USDT</b>\n"
+        f"Сумма: <b>{float(data['назначение_rate']):.2f} USDT</b>\n"
         f"Entry ID: <code>{entry_id}</code>",
         reply_markup=main_menu_keyboard(is_admin=await (smm_domain or db).is_admin(message.from_user.id, config.admin_ids) if message.from_user else False),
     )
