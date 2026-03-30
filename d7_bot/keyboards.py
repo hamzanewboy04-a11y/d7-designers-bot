@@ -15,6 +15,13 @@ AVAILABLE_ROLES: list[tuple[str, str]] = [
     ("🗂 Проджект-менеджер", "project_manager"),
 ]
 
+ROLE_HELP_TEXT: dict[str, str] = {
+    "designer": "Дизайнер сдаёт отчёты по задачам и следит за статусом оплаты.",
+    "smm": "SMM обычно не вносит отчёты сам: записи и выплаты чаще ведёт менеджер.",
+    "reviewer": "Отзовик отправляет отчёты по отзывам, которые потом проверяет менеджер.",
+    "project_manager": "Проджект-менеджер работает с очередями, SMM-записями и выплатами.",
+}
+
 # Human-readable role names (Russian)
 ROLE_LABELS: dict[str, str] = {
     "designer": "Дизайнер",
