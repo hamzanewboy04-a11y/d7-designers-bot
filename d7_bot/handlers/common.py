@@ -105,7 +105,7 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
             f"1. Зарегистрироваться\n"
             f"2. Указать свою роль и кошелёк\n"
             f"3. После этого появятся нужные вам действия\n\n"
-            f"Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register\n"
+            f"Сначала заполните профиль: нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register\n"
             f"Если хотите понять, как всё устроено — откройте /help"
         )
 
@@ -187,7 +187,7 @@ async def cmd_cancel(message: Message, state: FSMContext, db: Database, config: 
     current = await state.get_state()
     if current is None:
         await message.answer(
-            "ℹ️ Нечего отменять — вы не находитесь в процессе ввода данных.",
+            "ℹ️ Сейчас нечего отменять — вы не находитесь в процессе ввода данных.",
             reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return
@@ -212,7 +212,7 @@ async def cmd_me(message: Message, db: Database, config: Config) -> None:
     if not designer:
         await message.answer(
             "❌ Вы ещё не зарегистрированы.\n\n"
-            "Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
+            "Сначала заполните профиль: нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
             reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return
@@ -252,7 +252,7 @@ async def cmd_myreports(message: Message, db: Database, config: Config) -> None:
     if not designer:
         await message.answer(
             "❌ Вы ещё не зарегистрированы.\n\n"
-            "Нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
+            "Сначала заполните профиль: нажмите <b>«✏️ Редактировать профиль»</b> или используйте /register",
             reply_markup=main_menu_keyboard(is_admin=is_admin),
         )
         return

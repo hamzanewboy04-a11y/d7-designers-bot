@@ -49,8 +49,9 @@ async def cmd_register(message: Message, state: FSMContext) -> None:
     await state.set_state(RegisterStates.nick)
     await message.answer(
         "📝 <b>Регистрация / обновление профиля</b>\n\n"
-        "Введите ваш ник в D7:\n"
-        "<i>Можно любые символы — кириллица, латиница, цифры (2–32 символа)</i>\n\n"
+        "Введите ваш ник в D7.\n"
+        "<i>Можно использовать кириллицу, латиницу и цифры (2–32 символа).</i>\n\n"
+        "После этого бот попросит выбрать роль и кошелёк.\n"
         "<i>В любой момент: /cancel — отменить</i>",
     )
 
@@ -65,14 +66,15 @@ async def step_nick(message: Message, state: FSMContext) -> None:
         await message.answer(
             "❌ <b>Некорректный ник.</b>\n\n"
             "Длина: от 2 до 32 символов\n\n"
-            "Попробуйте ещё раз:"
+            "Попробуйте ещё раз."
         )
         return
     await state.update_data(d7_nick=nick)
     await state.set_state(RegisterStates.role)
     await message.answer(
         f"✅ Ник: <b>{nick}</b>\n\n"
-        "👔 <b>Выберите вашу роль:</b>",
+        "👔 <b>Выберите вашу роль:</b>\n\n"
+        "От роли зависит, какие действия и сценарии будут доступны в боте.",
         reply_markup=build_role_keyboard(),
     )
 
@@ -96,7 +98,8 @@ async def cb_role_select(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.message.answer(  # type: ignore[union-attr]
         f"✅ Роль: <b>{role_label}</b>\n\n"
         "💳 <b>Введите ваш TRC20-кошелёк USDT</b>\n\n"
-        "<i>Начинается с «T», ровно 34 символа (base58)</i>"
+        "На этот кошелёк будут ориентироваться в выплатах.\n"
+        "<i>Он должен начинаться с «T» и содержать ровно 34 символа.</i>"
     )
 
 
@@ -113,7 +116,7 @@ async def step_wallet(message: Message, state: FSMContext) -> None:
             "• Начинается с буквы «T»\n"
             "• Ровно 34 символа\n"
             "• Только символы base58\n\n"
-            "Проверьте адрес и попробуйте снова:"
+            "Проверьте адрес и попробуйте снова."
         )
         return
     await state.update_data(wallet=wallet)
@@ -126,7 +129,7 @@ async def step_wallet(message: Message, state: FSMContext) -> None:
         f"🏷 Ник: <code>{data['d7_nick']}</code>\n"
         f"👔 Роль: {role_label}\n"
         f"💳 Кошелёк: <code>{wallet}</code>\n\n"
-        "Всё верно?"
+        "Если всё верно — подтвердите сохранение."
     )
     await state.set_state(RegisterStates.confirm)
     await message.answer(
@@ -165,7 +168,7 @@ async def cb_confirm_yes(
     await callback.message.answer(  # type: ignore[union-attr]
         f"🎉 <b>Профиль {designer.d7_nick} успешно сохранён!</b>\n\n"
         f"Роль: {role_label}\n\n"
-        f"Теперь вы можете сдавать отчёты 👇",
+        f"Теперь профиль готов. Дальше можно сдавать отчёты, смотреть свои данные и пользоваться меню 👇",
         reply_markup=main_menu_keyboard(),
     )
     logger.info("Designer registered/updated: %s (tg_id=%s)", designer.d7_nick, user.id)
@@ -187,6 +190,6 @@ async def cb_confirm_no(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
     await callback.message.answer(  # type: ignore[union-attr]
         "✏️ Регистрация отменена.\n\n"
-        "Начните заново: /register или нажмите кнопку меню 👇",
+        "Если захотите вернуться к ней позже — используйте /register или кнопку меню 👇",
         reply_markup=main_menu_keyboard(),
     )
