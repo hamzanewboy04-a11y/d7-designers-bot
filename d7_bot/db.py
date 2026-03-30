@@ -1074,6 +1074,35 @@ class Database:
                 for row in rows
             ]
 
+    async def list_own_review_entries(self, employee_id: int, limit: int = 10) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            cursor = await db.execute(
+                """
+                SELECT re.id, re.report_date, re.status, re.comment,
+                       COALESCE(SUM(ri.total_usdt), 0.0) AS total_usdt,
+                       COUNT(ri.id) AS item_count
+                FROM review_entries re
+                LEFT JOIN review_entry_items ri ON ri.review_entry_id = re.id
+                WHERE re.employee_id = ?
+                GROUP BY re.id, re.report_date, re.status, re.comment, re.created_at
+                ORDER BY re.created_at DESC
+                LIMIT ?
+                """,
+                (employee_id, limit),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    'review_entry_id': int(row[0]),
+                    'report_date': row[1],
+                    'status': row[2],
+                    'comment': row[3] or '',
+                    'total_usdt': float(row[4]),
+                    'item_count': int(row[5]),
+                }
+                for row in rows
+            ]
+
     async def verify_review_entry(self, review_entry_id: int, pm_employee_id: int) -> dict | None:
         async with aiosqlite.connect(self.path) as db:
             summary = await self.get_review_entry_summary(review_entry_id)

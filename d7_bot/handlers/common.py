@@ -415,16 +415,29 @@ async def btn_status(message: Message, db: Database, config: Config) -> None:
     employee = await db.get_employee_by_telegram_id(user.id)
     if designer.role == "reviewer" and employee:
         batches = [item for item in await db.list_recent_reviewer_batches(limit=20) if item['employee_id'] == employee.id]
+        reports = await db.list_own_review_entries(employee.id, limit=5)
         pending_total = sum(item['total_usdt'] for item in batches if item['status'] == 'pending')
         paid_total = sum(item['total_usdt'] for item in batches if item['status'] == 'paid')
+        lines = [
+            "💸 <b>Мой статус</b>",
+            "",
+            f"Вы: <b>{html.escape(designer.d7_nick)}</b>",
+            f"Роль: <b>Отзовик</b>",
+            "",
+            f"📦 Пачек выплат: <b>{len(batches)}</b>",
+            f"✅ Уже оплачено: <b>{paid_total:.2f} USDT</b>",
+            f"⏳ Ожидает оплаты: <b>{pending_total:.2f} USDT</b>",
+        ]
+        if reports:
+            lines.append("\n<b>Последние отчёты:</b>")
+            for item in reports:
+                lines.append(
+                    f"• <code>{item['report_date']}</code> — {item['status']} — {item['total_usdt']:.2f} USDT"
+                    + (f"\n  ↳ комментарий: <i>{html.escape(item['comment'])}</i>" if item['comment'] else "")
+                )
+        lines.append("\nЕсли вы недавно отправили отчёт, он сначала должен пройти проверку менеджера.")
         await message.answer(
-            "💸 <b>Мой статус</b>\n\n"
-            f"Вы: <b>{html.escape(designer.d7_nick)}</b>\n"
-            f"Роль: <b>Отзовик</b>\n\n"
-            f"📦 Пачек выплат: <b>{len(batches)}</b>\n"
-            f"✅ Уже оплачено: <b>{paid_total:.2f} USDT</b>\n"
-            f"⏳ Ожидает оплаты: <b>{pending_total:.2f} USDT</b>\n\n"
-            "Если вы недавно отправили отчёт, он сначала должен пройти проверку менеджера.",
+            "\n".join(lines),
             reply_markup=main_menu_keyboard(role=designer.role, is_admin=is_admin),
         )
         return
