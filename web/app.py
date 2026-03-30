@@ -129,8 +129,9 @@ async def healthz() -> str:
 @app.get("/admin/login", response_class=HTMLResponse)
 async def login_page(request: Request, message: str | None = None):
     return TEMPLATES.TemplateResponse(
-        "login.html",
-        {"request": request, "title": "Login", "message": message},
+        request=request,
+        name="login.html",
+        context={"request": request, "title": "Login", "message": message},
     )
 
 
@@ -177,8 +178,9 @@ async def dashboard(request: Request):
         "web_reads": "postgres" if _pg_session_factory is not None else "sqlite",
     }
     return TEMPLATES.TemplateResponse(
-        "dashboard.html",
-        {
+        request=request,
+        name="dashboard.html",
+        context={
             "request": request,
             "title": "Dashboard",
             "stats": stats,
@@ -206,8 +208,9 @@ async def employees_page(request: Request):
 
     employees = await service.list_active()
     return TEMPLATES.TemplateResponse(
-        "employees.html",
-        {"request": request, "title": "Employees", "employees": employees, "operator_id": operator},
+        request=request,
+        name="employees.html",
+        context={"request": request, "title": "Employees", "employees": employees, "operator_id": operator},
     )
 
 
@@ -225,8 +228,9 @@ async def smm_assignments_page(request: Request, message: str | None = None):
     assignments = await service.list_assignments()
     smm_employees = [employee for employee in await employee_service.list_active() if employee.role == "smm"]
     return TEMPLATES.TemplateResponse(
-        "smm_assignments.html",
-        {
+        request=request,
+        name="smm_assignments.html",
+        context={
             "request": request,
             "title": "SMM Assignments",
             "assignments": assignments,
@@ -278,8 +282,9 @@ async def reviewer_entries_page(request: Request):
     service = reviewer_read_service()
     entries = await service.pending_entries()
     return TEMPLATES.TemplateResponse(
-        "reviewer_entries.html",
-        {"request": request, "title": "Reviewer Entries", "entries": entries, "operator_id": operator},
+        request=request,
+        name="reviewer_entries.html",
+        context={"request": request, "title": "Reviewer Entries", "entries": entries, "operator_id": operator},
     )
 
 
@@ -297,8 +302,9 @@ async def reviewer_entry_detail_page(request: Request, review_entry_id: int, mes
     if not entry:
         return HTMLResponse("<h1>Not found</h1>", status_code=404)
     return TEMPLATES.TemplateResponse(
-        "reviewer_entry_detail.html",
-        {"request": request, "title": f"Reviewer Entry {review_entry_id}", "entry": entry, "message": message, "operator_id": operator},
+        request=request,
+        name="reviewer_entry_detail.html",
+        context={"request": request, "title": f"Reviewer Entry {review_entry_id}", "entry": entry, "message": message, "operator_id": operator},
     )
 
 
@@ -344,8 +350,9 @@ async def payouts_page(request: Request, message: str | None = None):
     reviewer = reviewer_domain_service()
     smm = smm_domain_service()
     return TEMPLATES.TemplateResponse(
-        "payouts.html",
-        {
+        request=request,
+        name="payouts.html",
+        context={
             "request": request,
             "title": "Payouts",
             "message": message,
