@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
@@ -14,6 +14,7 @@ from d7_bot.db import Database
 from services.employees import EmployeeService
 from services.payroll import PayrollService
 from services.reviewer import ReviewerService
+from services.reviewer_domain import ReviewerDomainService
 from services.smm import SmmService
 from storage.repositories import (
     PostgresDashboardReadRepository,
@@ -21,6 +22,7 @@ from storage.repositories import (
     PostgresReviewerReadRepository,
     PostgresSmmReadRepository,
 )
+from storage.repositories.reviewer_domain import PostgresReviewerDomainRepository
 from storage.session import create_session_factory
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -58,6 +60,18 @@ async def ensure_db() -> tuple[bool, str | None]:
         _db_error = str(exc)
         logger.error("Web DB init failed: %s", exc)
         return False, _db_error
+
+
+def reviewer_read_service() -> ReviewerService:
+    if _pg_session_factory is not None:
+        return ReviewerService(PostgresReviewerReadRepository(_pg_session_factory))
+    return ReviewerService(db)
+
+
+def reviewer_domain_service() -> ReviewerDomainService:
+    if _pg_session_factory is not None:
+        return ReviewerDomainService(PostgresReviewerDomainRepository(_pg_session_factory, admin_fallback=db))
+    return ReviewerDomainService(db)
 
 
 @app.on_event("startup")
@@ -138,7 +152,7 @@ async def reviewer_entries_page(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    service = ReviewerService(PostgresReviewerReadRepository(_pg_session_factory)) if _pg_session_factory is not None else ReviewerService(db)
+    service = reviewer_read_service()
     entries = await service.pending_entries()
     return TEMPLATES.TemplateResponse(
         "reviewer_entries.html",
@@ -146,12 +160,49 @@ async def reviewer_entries_page(request: Request):
     )
 
 
+@app.get("/admin/reviewer/entries/{review_entry_id}", response_class=HTMLResponse)
+async def reviewer_entry_detail_page(request: Request, review_entry_id: int, message: str | None = None):
+    ok, err = await ensure_db()
+    if not ok:
+        return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
+    service = reviewer_domain_service()
+    entry = await service.get_review_entry_detail(review_entry_id)
+    if not entry:
+        return HTMLResponse("<h1>Not found</h1>", status_code=404)
+    return TEMPLATES.TemplateResponse(
+        "reviewer_entry_detail.html",
+        {"request": request, "title": f"Reviewer Entry {review_entry_id}", "entry": entry, "message": message},
+    )
+
+
+@app.post("/admin/reviewer/entries/{review_entry_id}/verify")
+async def reviewer_entry_verify(review_entry_id: int):
+    ok, _ = await ensure_db()
+    if not ok:
+        return HTMLResponse("DB unavailable", status_code=503)
+    service = reviewer_domain_service()
+    result = await service.verify_review_entry(review_entry_id, 0)
+    message = "Entry verified." if result else "Entry not found or already processed."
+    return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={message}", status_code=303)
+
+
+@app.post("/admin/reviewer/entries/{review_entry_id}/reject")
+async def reviewer_entry_reject(review_entry_id: int, comment: str = Form(default="")):
+    ok, _ = await ensure_db()
+    if not ok:
+        return HTMLResponse("DB unavailable", status_code=503)
+    service = reviewer_domain_service()
+    result = await service.reject_review_entry(review_entry_id, 0, comment.strip())
+    message = "Entry rejected." if result else "Entry not found or already processed."
+    return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={message}", status_code=303)
+
+
 @app.get("/admin/payouts", response_class=HTMLResponse)
 async def payouts_page(request: Request):
     ok, err = await ensure_db()
     if not ok:
         return HTMLResponse(f"<h1>D7 Admin</h1><p>DB unavailable</p><pre>{err}</pre>", status_code=503)
-    reviewer = ReviewerService(PostgresReviewerReadRepository(_pg_session_factory)) if _pg_session_factory is not None else ReviewerService(db)
+    reviewer = reviewer_read_service()
     smm = SmmService(PostgresSmmReadRepository(_pg_session_factory)) if _pg_session_factory is not None else SmmService(db)
     return TEMPLATES.TemplateResponse(
         "payouts.html",

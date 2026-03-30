@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import func, select, update
 
 from d7_bot.db import Employee, ReviewEntryItem, utc_now_iso
 from storage.models import EmployeeModel, PaymentBatchItemModel, PaymentBatchModel, ReviewEntryItemModel, ReviewEntryModel, ReviewRateRuleModel
@@ -145,6 +145,8 @@ class PostgresReviewerDomainRepository:
                     ReviewEntryModel.employee_id,
                     EmployeeModel.display_name,
                     ReviewEntryModel.report_date,
+                    ReviewEntryModel.status,
+                    ReviewEntryModel.created_at,
                     func.coalesce(func.sum(ReviewEntryItemModel.total_usdt), 0.0),
                     func.count(ReviewEntryItemModel.id),
                 )
@@ -156,6 +158,7 @@ class PostgresReviewerDomainRepository:
                     ReviewEntryModel.employee_id,
                     EmployeeModel.display_name,
                     ReviewEntryModel.report_date,
+                    ReviewEntryModel.status,
                     ReviewEntryModel.created_at,
                 )
                 .order_by(ReviewEntryModel.created_at.asc())
@@ -168,11 +171,44 @@ class PostgresReviewerDomainRepository:
                     "employee_id": int(row[1]),
                     "display_name": row[2],
                     "report_date": row[3],
-                    "total_usdt": float(row[4]),
-                    "item_count": int(row[5]),
+                    "status": row[4],
+                    "created_at": row[5],
+                    "total_usdt": float(row[6]),
+                    "item_count": int(row[7]),
                 }
                 for row in rows
             ]
+
+    async def get_review_entry_detail(self, review_entry_id: int) -> dict | None:
+        async with self.session_factory() as session:
+            summary = await self.get_review_entry_summary(review_entry_id)
+            if not summary:
+                return None
+            result = await session.execute(
+                select(
+                    ReviewEntryItemModel.id,
+                    ReviewEntryItemModel.review_type,
+                    ReviewEntryItemModel.quantity,
+                    ReviewEntryItemModel.unit_price,
+                    ReviewEntryItemModel.total_usdt,
+                    ReviewEntryItemModel.comment,
+                )
+                .where(ReviewEntryItemModel.review_entry_id == review_entry_id)
+                .order_by(ReviewEntryItemModel.id.asc())
+            )
+            items = [
+                {
+                    "id": int(row[0]),
+                    "review_type": row[1],
+                    "quantity": int(row[2]),
+                    "unit_price": float(row[3]),
+                    "total_usdt": float(row[4]),
+                    "comment": row[5] or "",
+                }
+                for row in result.all()
+            ]
+            summary["items"] = items
+            return summary
 
     async def verify_review_entry(self, review_entry_id: int, pm_employee_id: int) -> dict | None:
         summary = await self.get_review_entry_summary(review_entry_id)

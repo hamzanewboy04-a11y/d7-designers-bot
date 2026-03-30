@@ -63,5 +63,8 @@ class ReviewerDomainService:
     async def list_recent_reviewer_batches(self, limit: int = 15) -> list[dict]:
         return await self.backend.list_recent_reviewer_batches(limit=limit)
 
+    async def get_review_entry_detail(self, review_entry_id: int) -> dict | None:
+        return await self.backend.get_review_entry_detail(review_entry_id)
+
     async def is_admin(self, telegram_id: int, config_admin_ids: list[int]) -> bool:
         return await self.backend.is_admin(telegram_id, config_admin_ids)
