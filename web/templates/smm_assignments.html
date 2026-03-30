@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="topbar"><div><h2>SMM Assignments</h2><div class="subtitle">Активные assignments по SMM</div></div></div>
+<div class="topbar"><div><h2>SMM-назначения</h2><div class="subtitle">Активные назначения для SMM-сотрудников</div></div></div>
 
 {% if message %}
 <div class="flash">{{ message }}</div>
@@ -8,45 +8,45 @@
 
 <div class="grid two">
   <div class="section">
-    <h3>Create assignment</h3>
+    <h3>Создать назначение</h3>
     <form method="post" action="/admin/smm/assignments">
-      <label for="smm_employee_id">SMM employee</label>
+      <label for="smm_employee_id">SMM-сотрудник</label>
       <select id="smm_employee_id" name="smm_employee_id" required>
-        <option value="">Select employee</option>
+        <option value="">Выберите сотрудника</option>
         {% for employee in smm_employees %}
         <option value="{{ employee.id }}">{{ employee.display_name }} ({{ employee.id }})</option>
         {% endfor %}
       </select>
 
-      <label for="channel_name">Channel name</label>
+      <label for="channel_name">Название канала</label>
       <input id="channel_name" name="channel_name" type="text" required placeholder="PeruNews" />
 
-      <label for="geo">Geo</label>
+      <label for="geo">GEO</label>
       <input id="geo" name="geo" type="text" placeholder="PERU" />
 
-      <label for="daily_rate_usdt">Daily rate (USDT)</label>
+      <label for="daily_rate_usdt">Дневная ставка (USDT)</label>
       <input id="daily_rate_usdt" name="daily_rate_usdt" type="number" min="0" step="0.01" required />
 
-      <label for="active_from">Active from</label>
+      <label for="active_from">Активно с</label>
       <input id="active_from" name="active_from" type="date" />
 
-      <label for="comment">Comment</label>
-      <textarea id="comment" name="comment" rows="3" placeholder="Optional"></textarea>
+      <label for="comment">Комментарий</label>
+      <textarea id="comment" name="comment" rows="3" placeholder="Необязательно"></textarea>
 
-      <button class="button success" type="submit">Create assignment</button>
+      <button class="button success" type="submit">Создать назначение</button>
     </form>
   </div>
 
   <div class="section">
-    <h3>Notes</h3>
-    <p class="subtitle">Assignments define active SMM work items with daily payout rate. They are used later for PM-entered daily entries and weekly payout batches.</p>
+    <h3>Пояснение</h3>
+    <p class="subtitle">Назначения определяют активные SMM-задачи с дневной ставкой. Дальше они используются для PM-ввода дневных записей и формирования weekly payout batch'ей.</p>
   </div>
 </div>
 
 <div class="section">
-  <h3>Active assignments</h3>
+  <h3>Активные назначения</h3>
   <table>
-    <thead><tr><th>Assignment ID</th><th>SMM</th><th>Channel</th><th>Geo</th><th>Rate</th><th>Active from</th><th>Status</th></tr></thead>
+    <thead><tr><th>ID назначения</th><th>SMM</th><th>Канал</th><th>GEO</th><th>Ставка</th><th>Активно с</th><th>Статус</th></tr></thead>
     <tbody>
       {% for item in assignments %}
       <tr>

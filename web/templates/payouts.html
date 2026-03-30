@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="topbar"><div><h2>Payouts</h2><div class="subtitle">Pending reviewer и SMM batch'и</div></div></div>
+<div class="topbar"><div><h2>Выплаты</h2><div class="subtitle">Ожидающие выплаты отзовикам и SMM</div></div></div>
 
 {% if message %}
 <div class="flash">{{ message }}</div>
 {% endif %}
 
 <div class="section">
-  <h3>Pending Reviewer Batches</h3>
+  <h3>Ожидающие выплаты отзовикам</h3>
   <table>
-    <thead><tr><th>Batch ID</th><th>Employee</th><th>Date</th><th>Items</th><th>Total</th><th></th></tr></thead>
+    <thead><tr><th>ID batch</th><th>Сотрудник</th><th>Дата</th><th>Строк</th><th>Сумма</th><th></th></tr></thead>
     <tbody>
       {% for item in reviewer_batches %}
       <tr>
@@ -20,7 +20,7 @@
         <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
         <td>
           <form method="post" action="/admin/payouts/reviewer/{{ item.batch_id }}/paid">
-            <button class="button success" type="submit">Mark paid</button>
+            <button class="button success" type="submit">Отметить как оплаченный</button>
           </form>
         </td>
       </tr>
@@ -30,9 +30,9 @@
 </div>
 
 <div class="section">
-  <h3>Pending SMM Batches</h3>
+  <h3>Ожидающие выплаты SMM</h3>
   <table>
-    <thead><tr><th>Batch ID</th><th>Employee</th><th>Period</th><th>Items</th><th>Total</th><th></th></tr></thead>
+    <thead><tr><th>ID batch</th><th>Сотрудник</th><th>Период</th><th>Строк</th><th>Сумма</th><th></th></tr></thead>
     <tbody>
       {% for item in smm_batches %}
       <tr>
@@ -43,7 +43,7 @@
         <td>{{ '%.2f'|format(item.total_usdt) }} USDT</td>
         <td>
           <form method="post" action="/admin/payouts/smm/{{ item.batch_id }}/paid">
-            <button class="button success" type="submit">Mark paid</button>
+            <button class="button success" type="submit">Отметить как оплаченный</button>
           </form>
         </td>
       </tr>
@@ -54,9 +54,9 @@
 
 <div class="grid two">
   <div class="section">
-    <h3>Recent Reviewer Batches</h3>
+    <h3>Последние batch'и отзовиков</h3>
     <table>
-      <thead><tr><th>ID</th><th>Employee</th><th>Status</th><th>Total</th></tr></thead>
+      <thead><tr><th>ID</th><th>Сотрудник</th><th>Статус</th><th>Сумма</th></tr></thead>
       <tbody>
         {% for item in reviewer_history %}
         <tr>
@@ -70,9 +70,9 @@
     </table>
   </div>
   <div class="section">
-    <h3>Recent SMM Batches</h3>
+    <h3>Последние batch'и SMM</h3>
     <table>
-      <thead><tr><th>ID</th><th>Employee</th><th>Status</th><th>Total</th></tr></thead>
+      <thead><tr><th>ID</th><th>Сотрудник</th><th>Статус</th><th>Сумма</th></tr></thead>
       <tbody>
         {% for item in smm_history %}
         <tr>

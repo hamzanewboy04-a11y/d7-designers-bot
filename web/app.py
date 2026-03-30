@@ -122,7 +122,7 @@ async def current_operator_id(request: Request) -> int | None:
 async def require_operator(request: Request) -> int | RedirectResponse:
     operator_id = await current_operator_id(request)
     if operator_id is None:
-        return RedirectResponse(url="/admin/login?message=Please+log+in", status_code=303)
+        return RedirectResponse(url="/admin/login?message=Пожалуйста,+войдите", status_code=303)
     if operator_id in config.admin_ids:
         return operator_id
     try:
@@ -131,7 +131,7 @@ async def require_operator(request: Request) -> int | RedirectResponse:
     except Exception as exc:
         logger.warning("Admin fallback DB check failed for operator %s: %s", operator_id, exc)
     request.session.clear()
-    return RedirectResponse(url="/admin/login?message=Admin+access+required", status_code=303)
+    return RedirectResponse(url="/admin/login?message=Нужен+доступ+администратора", status_code=303)
 
 
 @app.on_event("startup")
@@ -179,13 +179,13 @@ async def login_action(request: Request, telegram_id: int = Form(...)):
             return RedirectResponse(url="/admin", status_code=303)
     except Exception as exc:
         logger.warning("Admin login DB fallback failed for %s: %s", telegram_id, exc)
-    return RedirectResponse(url="/admin/login?message=Unknown+or+unauthorized+operator", status_code=303)
+    return RedirectResponse(url="/admin/login?message=Неизвестный+или+неавторизованный+оператор", status_code=303)
 
 
 @app.post("/admin/logout")
 async def logout_action(request: Request):
     request.session.clear()
-    return RedirectResponse(url="/admin/login?message=Logged+out", status_code=303)
+    return RedirectResponse(url="/admin/login?message=Вы+вышли+из+системы", status_code=303)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -303,7 +303,7 @@ async def smm_assignment_create(
         active_from=active_from.strip() or None,
         comment=comment.strip(),
     )
-    return RedirectResponse(url="/admin/smm/assignments?message=Assignment created.", status_code=303)
+    return RedirectResponse(url="/admin/smm/assignments?message=Назначение+создано.", status_code=303)
 
 
 @app.get("/admin/reviewer/entries", response_class=HTMLResponse)
@@ -355,7 +355,7 @@ async def reviewer_entry_verify(request: Request, review_entry_id: int):
         return HTMLResponse("DB unavailable", status_code=503)
     service = reviewer_domain_service()
     result = await service.verify_review_entry(review_entry_id, operator)
-    message = "Entry verified." if result else "Entry not found or already processed."
+    message = "Отчёт+подтверждён." if result else "Отчёт+не+найден+или+уже+обработан."
     return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={quote(message)}", status_code=303)
 
 
@@ -370,7 +370,7 @@ async def reviewer_entry_reject(request: Request, review_entry_id: int, comment:
         return HTMLResponse("DB unavailable", status_code=503)
     service = reviewer_domain_service()
     result = await service.reject_review_entry(review_entry_id, operator, comment.strip())
-    message = "Entry rejected." if result else "Entry not found or already processed."
+    message = "Отчёт+отклонён." if result else "Отчёт+не+найден+или+уже+обработан."
     return RedirectResponse(url=f"/admin/reviewer/entries/{review_entry_id}?message={quote(message)}", status_code=303)
 
 
@@ -412,7 +412,7 @@ async def reviewer_batch_paid(request: Request, batch_id: int):
         return HTMLResponse("DB unavailable", status_code=503)
     service = reviewer_domain_service()
     result = await service.mark_reviewer_batch_paid(batch_id, operator)
-    message = "Reviewer batch marked as paid." if result else "Reviewer batch not found or already closed."
+    message = "Выплата+отзовику+отмечена+как+оплаченная." if result else "Batch+отзовика+не+найден+или+уже+закрыт."
     return RedirectResponse(url=f"/admin/payouts?message={quote(message)}", status_code=303)
 
 
@@ -427,5 +427,5 @@ async def smm_batch_paid(request: Request, batch_id: int):
         return HTMLResponse("DB unavailable", status_code=503)
     service = smm_domain_service()
     result = await service.mark_smm_batch_paid(batch_id, operator)
-    message = "SMM batch marked as paid." if result else "SMM batch not found or already closed."
+    message = "Выплата+SMM+отмечена+как+оплаченная." if result else "Batch+SMM+не+найден+или+уже+закрыт."
     return RedirectResponse(url=f"/admin/payouts?message={quote(message)}", status_code=303)

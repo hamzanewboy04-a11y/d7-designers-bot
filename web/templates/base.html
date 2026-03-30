@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ title or 'D7 Admin' }}</title>
+  <title>{{ title or 'D7 Админка' }}</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>D7 Admin</h1>
+      <h1>D7 Админка</h1>
       <nav>
-        <a href="/admin">Dashboard</a>
-        <a href="/admin/employees">Employees</a>
-        <a href="/admin/smm/assignments">SMM Assignments</a>
-        <a href="/admin/reviewer/entries">Reviewer Entries</a>
-        <a href="/admin/payouts">Payouts</a>
+        <a href="/admin">Главная</a>
+        <a href="/admin/employees">Сотрудники</a>
+        <a href="/admin/smm/assignments">SMM-назначения</a>
+        <a href="/admin/reviewer/entries">Очередь отзовиков</a>
+        <a href="/admin/payouts">Выплаты</a>
       </nav>
       {% if operator_id|default(None) %}
       <div class="sidebar-footer">
-        <div class="subtitle">Operator: {{ operator_id }}</div>
+        <div class="subtitle">Оператор: {{ operator_id }}</div>
         <form method="post" action="/admin/logout">
-          <button class="button secondary" type="submit">Logout</button>
+          <button class="button secondary" type="submit">Выйти</button>
         </form>
       </div>
       {% endif %}
