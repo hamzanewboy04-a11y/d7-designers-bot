@@ -232,7 +232,11 @@ async def cmd_me(message: Message, db: Database, config: Config) -> None:
         f"👔 Роль: {role_str}\n"
         f"💳 Кошелёк: <code>{wallet_display}</code>\n\n"
         f"📊 Задач за 7 дней: <b>{stats['task_count']}</b>\n"
-        f"💰 Сумма за 7 дней: <b>{stats['total_usdt']:.2f} USDT</b>"
+        f"💰 Сумма за 7 дней: <b>{stats['total_usdt']:.2f} USDT</b>\n\n"
+        f"<b>Что можно сделать дальше:</b>\n"
+        f"• <b>📝 Сдать отчёт</b> — если хотите добавить новые задачи\n"
+        f"• <b>📋 Мои задачи</b> — чтобы посмотреть последние записи\n"
+        f"• <b>✏️ Редактировать профиль</b> — если нужно обновить роль или кошелёк"
         f"{admin_badge}",
         reply_markup=main_menu_keyboard(is_admin=is_admin),
     )
@@ -258,7 +262,9 @@ async def cmd_myreports(message: Message, db: Database, config: Config) -> None:
         return
 
     await message.answer(
-        "📋 <b>Выберите период для просмотра задач:</b>",
+        "📋 <b>Мои задачи</b>\n\n"
+        "Здесь можно посмотреть свои последние отчёты и понять, сколько задач и на какую сумму уже зафиксировано.\n\n"
+        "Выберите период:",
         reply_markup=period_keyboard(),
     )
 
@@ -288,7 +294,7 @@ async def cb_period(callback: CallbackQuery, db: Database, config: Config) -> No
     if not rows:
         await callback.message.edit_text(  # type: ignore[union-attr]
             f"📋 За последние <b>{days} дней</b> задач не найдено.\n\n"
-            f"Сдайте первый отчёт через <b>«📝 Сдать отчёт»</b>",
+            f"Сдайте первый отчёт через <b>«📝 Сдать отчёт»</b>. После этого он появится здесь.",
         )
         await callback.message.answer(  # type: ignore[union-attr]
             "Выберите действие 👇",
@@ -316,6 +322,7 @@ async def cb_period(callback: CallbackQuery, db: Database, config: Config) -> No
         lines.append(f"  <i>Итого: {day_total:.2f} USDT</i>")
 
     lines.append(f"\n💰 <b>Всего за период: {grand_total:.2f} USDT</b>")
+    lines.append("\n<b>Что это значит:</b> здесь показаны ваши последние принятые задачи за выбранный период.")
 
     await callback.message.edit_text("\n".join(lines))  # type: ignore[union-attr]
     await callback.message.answer(  # type: ignore[union-attr]
