@@ -810,5 +810,5 @@ async def step_enter_comment(
         f"Дата: <b>{html.escape(str(data['report_date']))}</b>\n"
         f"Сумма: <b>{float(data['назначение_rate']):.2f} USDT</b>\n"
         f"Entry ID: <code>{entry_id}</code>",
-        reply_markup=main_menu_keyboard(is_admin=await (smm_domain or db).is_admin(message.from_user.id, config.admin_ids) if message.from_user else False),
+        reply_markup=main_menu_keyboard(role="project_manager", is_admin=await (smm_domain or db).is_admin(message.from_user.id, config.admin_ids) if message.from_user else False),
     )
