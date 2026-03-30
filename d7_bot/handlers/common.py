@@ -18,6 +18,7 @@ from d7_bot.keyboards import (
     BTN_PM_SMM_REPORT,
     BTN_PROFILE,
     BTN_REPORT,
+    BTN_STATUS,
     BTN_TASKS,
     ROLE_LABELS,
     admin_hub_keyboard,
@@ -375,6 +376,76 @@ async def btn_tasks(message: Message, db: Database, config: Config) -> None:
     await cmd_myreports(message, db, config)
 
 
+@router.message(F.text == BTN_STATUS)
+async def btn_status(message: Message, db: Database, config: Config) -> None:
+    user = message.from_user
+    if not user:
+        return
+
+    is_admin = await db.is_admin(user.id, config.admin_ids)
+    designer = await db.get_designer(user.id)
+    if not designer:
+        await message.answer(
+            "❌ Сначала заполните профиль, чтобы бот мог показать ваш статус.",
+            reply_markup=main_menu_keyboard(is_admin=is_admin),
+        )
+        return
+
+    if designer.role == "designer":
+        payment = await db.get_designer_payment_summary(designer.telegram_id)
+        await message.answer(
+            "💸 <b>Мой статус</b>\n\n"
+            f"Вы: <b>{html.escape(designer.d7_nick)}</b>\n"
+            f"Роль: <b>{ROLE_LABELS.get(designer.role, designer.role)}</b>\n\n"
+            f"📋 Отчётов: <b>{payment['report_count']}</b>\n"
+            f"✅ Уже оплачено: <b>{payment['paid_usdt']:.2f} USDT</b>\n"
+            f"⏳ Ожидает оплаты: <b>{payment['pending_usdt']:.2f} USDT</b>\n\n"
+            "Если что-то не сходится, проверьте <b>📋 Мои задачи</b> и при необходимости уточните у менеджера.",
+            reply_markup=main_menu_keyboard(role=designer.role, is_admin=is_admin),
+        )
+        return
+
+    employee = await db.get_employee_by_telegram_id(user.id)
+    if designer.role == "reviewer" and employee:
+        batches = [item for item in await db.list_recent_reviewer_batches(limit=20) if item['employee_id'] == employee.id]
+        pending_total = sum(item['total_usdt'] for item in batches if item['status'] == 'pending')
+        paid_total = sum(item['total_usdt'] for item in batches if item['status'] == 'paid')
+        await message.answer(
+            "💸 <b>Мой статус</b>\n\n"
+            f"Вы: <b>{html.escape(designer.d7_nick)}</b>\n"
+            f"Роль: <b>Отзовик</b>\n\n"
+            f"📦 Пачек выплат: <b>{len(batches)}</b>\n"
+            f"✅ Уже оплачено: <b>{paid_total:.2f} USDT</b>\n"
+            f"⏳ Ожидает оплаты: <b>{pending_total:.2f} USDT</b>\n\n"
+            "Если вы недавно отправили отчёт, он сначала должен пройти проверку менеджера.",
+            reply_markup=main_menu_keyboard(role=designer.role, is_admin=is_admin),
+        )
+        return
+
+    if designer.role == "smm" and employee:
+        batches = [item for item in await db.list_recent_smm_batches(limit=20) if item['employee_id'] == employee.id]
+        pending_total = sum(item['total_usdt'] for item in batches if item['status'] == 'pending')
+        paid_total = sum(item['total_usdt'] for item in batches if item['status'] == 'paid')
+        await message.answer(
+            "💸 <b>Мой статус</b>\n\n"
+            f"Вы: <b>{html.escape(designer.d7_nick)}</b>\n"
+            f"Роль: <b>SMM</b>\n\n"
+            f"📦 Пачек выплат: <b>{len(batches)}</b>\n"
+            f"✅ Уже оплачено: <b>{paid_total:.2f} USDT</b>\n"
+            f"⏳ Ожидает оплаты: <b>{pending_total:.2f} USDT</b>\n\n"
+            "Записи по SMM обычно вносит менеджер. Если есть вопросы по начислениям, лучше уточнить у PM.",
+            reply_markup=main_menu_keyboard(role=designer.role, is_admin=is_admin),
+        )
+        return
+
+    await message.answer(
+        "💸 <b>Мой статус</b>\n\n"
+        "Для вашей роли пока нет отдельного экрана со статусом выплат.\n"
+        "Используйте профиль, помощь и рабочие разделы по вашей роли.",
+        reply_markup=main_menu_keyboard(role=designer.role, is_admin=is_admin),
+    )
+
+
 @router.message(F.text == BTN_EDIT)
 async def btn_edit(message: Message, state: FSMContext) -> None:
     from d7_bot.handlers.register import cmd_register
@@ -414,6 +485,7 @@ async def fallback_handler(message: Message, state: FSMContext, db: Database, co
 
     user = message.from_user
     is_admin = await db.is_admin(user.id, config.admin_ids) if user else False
+    designer = await db.get_designer(user.id) if user else None
 
     await message.answer(
         "🤔 Я не понял эту команду.\n\n"

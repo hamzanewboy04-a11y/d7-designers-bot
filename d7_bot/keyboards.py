@@ -27,6 +27,7 @@ ROLE_LABELS: dict[str, str] = {
 BTN_REPORT = "📝 Сдать отчёт"
 BTN_PROFILE = "👤 Мой профиль"
 BTN_TASKS = "📋 Мои задачи"
+BTN_STATUS = "💸 Мой статус"
 BTN_EDIT = "✏️ Редактировать профиль"
 BTN_HELP = "❓ Помощь"
 BTN_PM_SMM_REPORT = "📱 Внести SMM-отчёт"
@@ -48,8 +49,8 @@ BTN_ADMIN_ANALYTICS_DAY = "📉 Аналитика день"
 BTN_ADMIN_ANALYTICS_WEEK = "📈 Аналитика 7 дней"
 BTN_ADMIN_ANALYTICS_MONTH = "🗓 Аналитика 30 дней"
 
-MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_HELP}
-ADMIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_EDIT, BTN_HELP, BTN_ADMIN_HUB}
+MAIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_STATUS, BTN_EDIT, BTN_HELP}
+ADMIN_MENU_BUTTONS = {BTN_REPORT, BTN_PROFILE, BTN_TASKS, BTN_STATUS, BTN_EDIT, BTN_HELP, BTN_ADMIN_HUB}
 
 
 # ── Reply keyboards ─────────────────────────────────────────────────────────
@@ -64,23 +65,25 @@ def main_menu_keyboard(role: str | None = None, is_admin: bool = False) -> Reply
         keyboard = [
             [KeyboardButton(text=BTN_PM_SMM_REPORT), KeyboardButton(text=BTN_PM_REVIEW_QUEUE)],
             [KeyboardButton(text=BTN_PM_PAYOUTS), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_EDIT), KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_STATUS), KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_EDIT)],
         ]
     elif role == "reviewer":
         keyboard = [
             [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_EDIT), KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_STATUS), KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_EDIT)],
         ]
     elif role == "smm":
         keyboard = [
-            [KeyboardButton(text=BTN_PROFILE), KeyboardButton(text=BTN_EDIT)],
-            [KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_PROFILE), KeyboardButton(text=BTN_STATUS)],
+            [KeyboardButton(text=BTN_EDIT), KeyboardButton(text=BTN_HELP)],
         ]
     else:
         keyboard = [
             [KeyboardButton(text=BTN_REPORT), KeyboardButton(text=BTN_PROFILE)],
-            [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_EDIT)],
-            [KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_TASKS), KeyboardButton(text=BTN_STATUS)],
+            [KeyboardButton(text=BTN_EDIT), KeyboardButton(text=BTN_HELP)],
         ]
     if is_admin:
         keyboard.append([KeyboardButton(text=BTN_ADMIN_HUB)])
